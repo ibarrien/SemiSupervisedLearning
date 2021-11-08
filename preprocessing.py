@@ -1,16 +1,13 @@
 """
 Preprocessing of train and test newsgroups data.
 
-@author: ivbarrie
-"""
-
-
-"""
-Fetch dataset
-
-Documentation
+DataSet Documentation
 -------------
 https://scikit-learn.org/stable/modules/generated/sklearn.datasets.fetch_20newsgroups.html?highlight=newsgroup#sklearn.datasets.fetch_20newsgroups
+
+
+@author: ivbarrie
+
 """
 
 import re
