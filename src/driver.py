@@ -8,7 +8,6 @@ Entry point.
 import pickle
 import pathlib
 from nltk.corpus import stopwords
-from nltk.stem import PorterStemmer
 from nltk.corpus import words as nltk_english_words
 
 from .lib_utils.preprocessing import TextPreProcessor
@@ -18,7 +17,6 @@ version = 1
 english_vocab = set(nltk_english_words.words())
 _tokens_to_remove = stopwords.words('english')
 _tokens_to_remove.append('e')
-porter_stemmer = PorterStemmer()
 
 # PATHS
 main_dir = r'C:/Users/ivbarrie/Desktop/Projects/SSL'
