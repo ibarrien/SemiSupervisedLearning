@@ -5,6 +5,25 @@ DataSet Documentation
 -------------
 https://scikit-learn.org/stable/modules/generated/sklearn.datasets.fetch_20newsgroups.html?highlight=newsgroup#sklearn.datasets.fetch_20newsgroups
 
+Example of working with 20 Newsgroup data from:
+https://scikit-learn.org/0.19/datasets/twenty_newsgroups.html
+
+# TRAIN
+newsgroups_train = fetch_20newsgroups(subset='train',
+                                      remove=('headers', 'footers', 'quotes'),
+                                      categories=categories)
+vectors = vectorizer.fit_transform(newsgroups_train.data)
+clf = MultinomialNB(alpha=.01)
+clf.fit(vectors, newsgroups_train.target)
+
+# TEST
+newsgroups_test = fetch_20newsgroups(subset='test',
+                                     remove=('headers', 'footers', 'quotes'),
+                                     categories=categories)
+vectors_test = vectorizer.transform(newsgroups_test.data)
+pred = clf.predict(vectors_test)
+metrics.f1_score(newsgroups_test.target, pred, average='macro')  # 0.77
+
 
 @author: ivbarrie
 
@@ -54,16 +73,25 @@ def process_text(text: str, tokens_to_remove: List[str], english_vocab: List[str
 class TextPreProcessor:
     """Preprocessing of text documents."""
 
-    def __init__(self, tokens_to_remove, english_vocab, doc_axis=1,
+    def __init__(self, tokens_to_remove, english_vocab,
+                 doc_axis: int = 1,
+                 label_names_key: str = 'target_names',
+                 label_vals_key: str = 'target',
+                 remove_zero_vocab_docs: bool = True,
                  remove_fields=('headers', 'footers', 'quotes')):
         self.tokens_to_remove = tokens_to_remove
         self.english_vocab = english_vocab
-        self.doc_axis = 1
+        self.doc_axis = doc_axis
         self.remove_fields = remove_fields
         self.port_stemmer = PorterStemmer()
+        self.label_names_key = label_names_key
+        self.label_vals_key = label_vals_key
+        self.remove_zero_vocab_docs = remove_zero_vocab_docs
         self.train_data = [""]
+        self.train_label_vals = [0]
         self.train_count_data = [0]
         self.test_data = [""]
+        self.test_label_vals = [0]
         self.test_count_data = [0]
         self.count_vectorizer = None  # def in train data processing
         self.vocab = None  # def in training data processing
@@ -80,8 +108,10 @@ class TextPreProcessor:
 
     def set_train_raw_data(self):
         """Set raw train data"""
-        train_bunch = self.load_data(subset='train')
-        self.train_data = train_bunch.data  # List[str]
+        self.train_bunch = self.load_data(subset='train')
+        self.train_data = self.train_bunch.data  # List[str]
+        self.train_label_vals = self.train_bunch[self.label_vals_key]  # List[str], len = len(self.train_data)
+        self.train_label_names = self.train_bunch[self.label_names_key]  # List[str], len = 20
 
     def set_test_raw_data(self):
         """Set raw test data"""
@@ -116,16 +146,22 @@ class TextPreProcessor:
         return data_vect_array
 
     @staticmethod
-    def remove_zero_count_docs(doc_count_data: np.ndarray, doc_axis: int = 1) -> np.ndarray:
-        """Remove documents that are zero count vectors."""
+    def remove_zero_count_docs(doc_count_data: np.ndarray, doc_axis: int = 1) -> Tuple[np.ndarray]:
+        """Remove zero count doc vectors wrt *preprocessed vocab* and keep their labels."""
         count_sums = np.sum(doc_count_data, axis=doc_axis)
+        mask = count_sums > 0  # use original indices for label val retrieval
         nonzero_doc_data = doc_count_data[count_sums > 0]
-        return nonzero_doc_data
+        return nonzero_doc_data, mask
 
     def set_train_count_data(self):
         """Set np.ndarray of bag of words for train set; rows: docs, cols: word counts."""
         self.train_count_data = self.preprocess_data_to_array(subset='train')
-        self.train_count_data = self.remove_zero_count_docs(doc_count_data=self.train_count_data)
+        if self.remove_zero_vocab_docs:
+            self.train_count_data, mask = self.remove_zero_count_docs(doc_count_data=self.train_count_data)
+            original_train_size = len(self.train_label_vals)
+            self.train_label_vals = self.train_label_vals[mask]
+            print('After zero count doc removal:\n Kept %d samples from original %d train'
+                  % (len(self.train_label_vals), original_train_size))
         return None
 
     def set_test_count_data(self):
