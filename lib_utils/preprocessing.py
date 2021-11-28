@@ -150,7 +150,7 @@ class TextPreProcessor:
         """Remove zero count doc vectors wrt *preprocessed vocab* and keep their labels."""
         count_sums = np.sum(doc_count_data, axis=doc_axis)
         mask = count_sums > 0  # use original indices for label val retrieval
-        nonzero_doc_data = doc_count_data[count_sums > 0]
+        nonzero_doc_data = doc_count_data[mask]
         return nonzero_doc_data, mask
 
     def set_train_count_data(self):
