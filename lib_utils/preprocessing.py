@@ -56,7 +56,7 @@ def is_english(text: str, english_vocab: List[str]) -> str:
     return english_words_text
 
 
-def process_text(text: str, tokens_to_remove: List[str], english_vocab: List[str]) -> str:
+def process_text(text: str, tokens_to_remove: List[str], english_vocab: None) -> str:
     """Basic text processing."""
     # filtered.translate(str.maketrans('', '', string.punctuation))
     filtered = text.lower()
@@ -66,27 +66,39 @@ def process_text(text: str, tokens_to_remove: List[str], english_vocab: List[str
     filtered = re.sub(r'\s+', ' ', filtered)
     # filtered = _stem(filtered)
     filtered = remove_stop_words(filtered, tokens_to_remove=tokens_to_remove)
-    filtered = is_english(filtered, english_vocab=english_vocab)
+    if english_vocab:
+        filtered = is_english(filtered, english_vocab=english_vocab)
     return filtered
 
 
 class TextPreProcessor:
-    """Preprocessing of text documents."""
+    """Preprocessing of text documents.
 
-    def __init__(self, tokens_to_remove, english_vocab,
-                 doc_axis: int = 1,
+    Params:
+        english_vocab (List(str) or None): English words to restrict data to
+        vocab_axis (int): index of words in vocabulary
+        remove_fields (Tuple(str)): fields to remove from 20 Newsgroup
+
+    Notes:
+        To avoid overfitting, recommended to set:
+        remove_fields=('headers', 'footers', 'quotes')
+    """
+    def __init__(self, tokens_to_remove, english_vocab=None,
+                 vocab_axis: int = 1,
                  label_names_key: str = 'target_names',
                  label_vals_key: str = 'target',
                  remove_zero_vocab_docs: bool = True,
+                 train_pct_subsample: float = 1.0,
                  remove_fields=('headers', 'footers', 'quotes')):
         self.tokens_to_remove = tokens_to_remove
         self.english_vocab = english_vocab
-        self.doc_axis = doc_axis
+        self.vocab_axis = vocab_axis
         self.remove_fields = remove_fields
         self.port_stemmer = PorterStemmer()
         self.label_names_key = label_names_key
         self.label_vals_key = label_vals_key
         self.remove_zero_vocab_docs = remove_zero_vocab_docs
+        self.train_pct_subsample = train_pct_subsample
         self.train_data = [""]
         self.train_label_vals = [0]
         self.train_count_data = [0]
@@ -102,6 +114,8 @@ class TextPreProcessor:
             raise Exception("subset of 20NewsGroup must be 'train' or 'test'")
         data_bunch = fetch_20newsgroups(data_home=None,
                                         subset=subset,
+                                        shuffle=True,
+                                        random_state=1,
                                         remove=self.remove_fields)
 
         return data_bunch
@@ -109,9 +123,16 @@ class TextPreProcessor:
     def set_train_raw_data(self):
         """Set raw train data"""
         self.train_bunch = self.load_data(subset='train')
+        self.train_label_names = self.train_bunch[self.label_names_key]  # List[str], len = 20
         self.train_data = self.train_bunch.data  # List[str]
         self.train_label_vals = self.train_bunch[self.label_vals_key]  # List[str], len = len(self.train_data)
-        self.train_label_names = self.train_bunch[self.label_names_key]  # List[str], len = 20
+        n_original_train_samples = len(self.train_data)
+        n_train_samples = int(self.train_pct_subsample * n_original_train_samples)
+        print('selecting %d train samples from %d' %
+              (n_train_samples, n_original_train_samples))
+        # Shuffled train data on load by default
+        self.train_data = self.train_data[: n_train_samples]
+        self.train_label_vals = self.train_label_vals[: n_train_samples]
 
     def set_test_raw_data(self):
         """Set raw test data"""
@@ -146,9 +167,9 @@ class TextPreProcessor:
         return data_vect_array
 
     @staticmethod
-    def remove_zero_count_docs(doc_count_data: np.ndarray, doc_axis: int = 1) -> Tuple[np.ndarray]:
+    def remove_zero_count_docs(doc_count_data: np.ndarray, vocab_axis: int = 1) -> Tuple[np.ndarray]:
         """Remove zero count doc vectors wrt *preprocessed vocab* and keep their labels."""
-        count_sums = np.sum(doc_count_data, axis=doc_axis)
+        count_sums = np.sum(doc_count_data, axis=vocab_axis)
         mask = count_sums > 0  # use original indices for label val retrieval
         nonzero_doc_data = doc_count_data[mask]
         return nonzero_doc_data, mask
@@ -172,18 +193,18 @@ class TextPreProcessor:
 
     def get_doc_lens(self):
         """Compute constant doc length via max len of train set."""
-        self.train_doc_lens = np.sum(self.train_count_data, axis=self.doc_axis)
+        self.train_doc_lens = np.sum(self.train_count_data, axis=self.vocab_axis)
         self.max_doc_len = np.max(self.train_doc_lens)
         self.med_doc_len = np.median(self.train_doc_lens)
         return None
 
     @staticmethod
-    def stats_nonzero_word_count_per_doc(word_count_data: np.ndarray, doc_axis: int = 1) -> Tuple[float, float]:
+    def stats_nonzero_word_count_per_doc(word_count_data: np.ndarray, vocab_axis: int = 1) -> Tuple[float, float]:
         """Stats for number of nonzero word counts per document."""
-        nonzero_word_counts = np.sum(word_count_data.astype(np.bool_), axis=doc_axis)
+        nonzero_word_counts = np.sum(word_count_data.astype(np.bool_), axis=vocab_axis)
         return np.median(nonzero_word_counts), np.mean(nonzero_word_counts)
 
-    def make_uniform_doc_lens(self, word_count_data: np.ndarray, doc_axis: int = 1,
+    def make_uniform_doc_lens(self, word_count_data: np.ndarray, vocab_axis: int = 1,
                               strategy: str = 'median') -> np.ndarray:
         """For each doc sum of each doc -> constant
         This constant is determined by the train dataset.
@@ -195,6 +216,6 @@ class TextPreProcessor:
             static_doc_len = self.max_doc_len
         else:
             raise Exception('Static doc len strategy %s not implemented' % strategy)
-        reshaped_sums = np.sum(word_count_data, axis=doc_axis).reshape(len(word_count_data), 1)
+        reshaped_sums = np.sum(word_count_data, axis=vocab_axis).reshape(len(word_count_data), 1)
         scaled_word_count_data = (static_doc_len / reshaped_sums) * word_count_data
         return scaled_word_count_data
