@@ -43,9 +43,9 @@ def remove_stop_words(text: str, tokens_to_remove: List[str]) -> str:
     return new_text
 
 
-def _stem(text: str, min_len_stemmed: int = 2) -> str:
+def _stem(text: str, stemmer, min_len_stemmed: int = 2) -> str:
     """Remove stemming from sentence"""
-    new_text = ' '.join([porter_stemmer.stem(x) for x in text.split()])
+    new_text = ' '.join([stemmer.stem(x) for x in text.split()])
     new_text = ' '.join([x for x in new_text.split() if len(x) > min_len_stemmed])
     return new_text
 
@@ -56,7 +56,8 @@ def is_english(text: str, english_vocab: List[str]) -> str:
     return english_words_text
 
 
-def process_text(text: str, tokens_to_remove: List[str], english_vocab: None) -> str:
+def process_text(text: str, tokens_to_remove: List[str],
+                 english_vocab: List[str], stemmer=None) -> str:
     """Basic text processing."""
     # filtered.translate(str.maketrans('', '', string.punctuation))
     filtered = text.lower()
@@ -64,7 +65,8 @@ def process_text(text: str, tokens_to_remove: List[str], english_vocab: None) ->
     filtered = re.sub(r'\[[0-9]*\]', ' ', filtered)
     filtered = re.sub(r'\s+', ' ', filtered)
     filtered = re.sub(r'\s+', ' ', filtered)
-    # filtered = _stem(filtered)
+    if stemmer:
+        filtered = _stem(filtered, stemmer=stemmer)
     filtered = remove_stop_words(filtered, tokens_to_remove=tokens_to_remove)
     if english_vocab:
         filtered = is_english(filtered, english_vocab=english_vocab)
@@ -94,7 +96,7 @@ class TextPreProcessor:
         self.english_vocab = english_vocab
         self.vocab_axis = vocab_axis
         self.remove_fields = remove_fields
-        self.port_stemmer = PorterStemmer()
+        self.port_stemmer = None  # PorterStemmer()
         self.label_names_key = label_names_key
         self.label_vals_key = label_vals_key
         self.remove_zero_vocab_docs = remove_zero_vocab_docs
