@@ -1,7 +1,23 @@
 """
 EM train and test, after EDA.
 
-@author: ivbarrie
+Summary
+-------
+Follows Nigam et al "Semi-Supervised Text Classification Using EM" [2006, Ch 3 in SSL Book].
+
+Treat each document as a vector of word counts (cf. preprocessing.py).
+Initialize a naive bayes classifier (NBC) on labeled data.
+Use NBC to compute class membership probabilities on unlabeled data.
+Define a loss function as a sum of labeled_loss + unlabeled_loss.
+Apply EM to this loss function until lower bound is not improved.
+
+Notes
+-----
+Each "Eq" referes to an equation in [Nigam] Section 3.2.
+
+@author: ibarrien
+@email: corps.des.nombres@gmail.com
+
 """
 
 import pathlib
@@ -11,10 +27,21 @@ import numpy as np
 
 class EM_SSL(object):
     """ Expectation maximization, naive bayes + Dirichlet prior with \alpha_j = 2 (for all classes j)
+
+        Params:
+            labeled_count_data (np.ndarray): labeled data, typically a 10% subsample for SSL
+            label_vals (np.ndarrray): label values for each labeled sample
+            doc_axis (int): index for documents
+            vocab_axis (int): index for word counts, i.e. vocab axis
+
+        Notes:
+            Input count data can be implemented as a count vectorizer on bag of words
+            See preprocessing.py for an example
     """
     def __init__(self, labeled_count_data: np.ndarray, label_vals: np.ndarray,
                  unlabeled_count_data: np.ndarray = None,
                  doc_axis: int = 0, vocab_axis: int = 1):
+
         # Static vals
         self.labeled_count_data = labeled_count_data  # (n_docs, n_words) LABELED COUNT DATA
         self.unlabeled_count_data = unlabeled_count_data
@@ -71,7 +98,7 @@ class EM_SSL(object):
 
         Returns:
             n_jt (np.ndarray): vector of words' count in class_count_data
-            n_jt.shape = (vocab_size,) = .
+            n_jt.shape = (vocab_size,)
         """
         if only_labeled_data:
             n_jt_vect = np.sum(class_count_data, axis=self.doc_axis)
