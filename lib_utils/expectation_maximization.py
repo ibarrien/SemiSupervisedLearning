@@ -26,11 +26,15 @@ import numpy as np
 
 
 class EM_SSL(object):
-    """ Expectation maximization, naive bayes + Dirichlet prior with \alpha_j = 2 (for all classes j)
+    """Expectation maximization on Semi supervised learning task
+
+        Base classification model: naive bayes + Dirichlet prior with \alpha_j = 2 (for all classes j).
+        Documents are represented as vectors of word counts aka "count data".
 
         Params:
-            labeled_count_data (np.ndarray): labeled data, typically a 10% subsample for SSL
+            labeled_count_data (np.ndarray): labeled count data, typically a 10% subsample for SSL
             label_vals (np.ndarrray): label values for each labeled sample
+            unlabeled_count_data (np.ndarray): count data without label vals
             doc_axis (int): index for documents
             vocab_axis (int): index for word counts, i.e. vocab axis
 
@@ -39,7 +43,7 @@ class EM_SSL(object):
             See preprocessing.py for an example
     """
     def __init__(self, labeled_count_data: np.ndarray, label_vals: np.ndarray,
-                 unlabeled_count_data: np.ndarray = None,
+                 unlabeled_count_data: np.ndarray,
                  doc_axis: int = 0, vocab_axis: int = 1):
 
         # Static vals
@@ -63,11 +67,12 @@ class EM_SSL(object):
         self.n_docs_in_class: float = 0  # given class j, num docs in class (float if unlabeled data)
         self.theta_j: float = 0  # Naive Bayes class prob of class j
         # Hash maps of statistics
-        self.theta_j_per_class = np.zeros(self.n_labels)  # vals = theta_j: float via Eq 3.6 in SSL
-        self.theta_jt_per_class = np.zeros([self.n_labels, self.vocab_size])  # vals = theta_jt: np.ndarray (vocab_size,)
+        self.theta_j_per_class = np.zeros(self.n_labels)  # vals = theta_j: float
+        self.theta_jt_per_class = np.zeros([self.n_labels, self.vocab_size])  # vals = theta_jt: np.ndarray
         self.n_docs_per_class = np.zeros(self.n_labels)   # vals = num docs: int
         self.total_word_count_per_class = np.zeros(self.n_labels)  # vals: total words: int
-        self.word_counts_per_class = np.zeros([self.n_labels, self.vocab_size])  # vals = word_counts: np.ndarray (vocab_size, )
+        self.word_counts_per_class = np.zeros([self.n_labels, self.vocab_size])  # vals = word_counts: np.ndarray
+        self.unlabeled_data_class_probas = np.array([])  # (n_unlabeled_docs, n_labels)
 
     def set_in_class_mask(self, class_idx: int = 0):
         """Data mask of class label."""
@@ -79,12 +84,14 @@ class EM_SSL(object):
 
     def compute_doc_counts_in_class(self, only_labeled_data=True) -> float:
         """Compute n_j: num (potentially fractional) documents with class label. Assumes class mask is set."""
+        n_docs_in_class = 0.0
         if only_labeled_data:
             n_docs_in_class = np.sum(self.class_mask, axis=0)
         return n_docs_in_class
 
     def compute_theta_j(self, n_docs_in_class: float, only_labeled_data=True) -> float:
         """Compute single class proba = P(class = j | theta) via Eq 3.6. Assumes class mask is set."""
+        theta_j = 0.0
         if only_labeled_data:
             theta_j = (n_docs_in_class + 1) / (self.n_docs + self.n_labels)
         return theta_j
@@ -100,6 +107,7 @@ class EM_SSL(object):
             n_jt (np.ndarray): vector of words' count in class_count_data
             n_jt.shape = (vocab_size,)
         """
+        n_jt_vect = np.array([])
         if only_labeled_data:
             n_jt_vect = np.sum(class_count_data, axis=self.doc_axis)
 
@@ -123,6 +131,7 @@ class EM_SSL(object):
     def compute_all_thetas_for_labeled_data(self):
         """For each class j, labeled docs, and words, compute the "mixture" theta:
             [theta_j] and  [theta_jt: t in words = vocab]
+        These are the maximum a posteriori (MAP) estimates of the Naive Bayes model.
         """
         for j in self.ordered_labels_list:
             self.set_in_class_mask(class_idx=j)
@@ -144,11 +153,13 @@ class EM_SSL(object):
 
         Params:
             doc_word_counts: representation of a single document, shape = (vocab_size,)
+
+        Example:
+
         """
-        doc_probas_per_class = np.zeros(self.n_labels)
-        for j in self.ordered_labels_list:
-            doc_proba_j = np.prod(self.theta_jt_per_class[j] ** doc_word_counts, axis=0)
-            doc_probas_per_class[j] = doc_proba_j
+        doc_probas_per_class = np.array([np.prod(self.theta_jt_per_class[j] ** doc_word_counts, axis=0)
+                                         for j in self.ordered_labels_list])
+
         return doc_probas_per_class
 
     def compute_unnormalized_class_probas_doc(self, doc_word_counts: np.ndarray) -> np.ndarray:
@@ -162,7 +173,8 @@ class EM_SSL(object):
             Used directly, without normalizing, to compute loss: Eq 3.8 in SSL
         """
         doc_probas_per_class = self.compute_doc_proba_per_class(doc_word_counts=doc_word_counts)
-        u_class_probas_doc = np.prod([self.theta_j_per_class, doc_probas_per_class], axis=0)
+        # u_class_probas_doc = np.prod([self.theta_j_per_class, doc_probas_per_class], axis=0)
+        u_class_probas_doc = np.multiply(self.theta_j_per_class, doc_probas_per_class)
         return u_class_probas_doc
 
     def compute_normalized_class_probas_doc(self, doc_word_counts: np.ndarray):
@@ -177,6 +189,13 @@ class EM_SSL(object):
         normalized_class_probs = unnormalized_class_probas / denom
         return normalized_class_probs
 
+    def compute_class_probas_unlabeled_data(self):
+        """For each unlabeled doc x_u and class j, compute P(c = j | x_u, theta)."""
+        # np.array([self.compute_normalized_class_probas_doc(u) for u in self.unlabeled_count_data])
+        self.unlabeled_data_class_probas = np.apply_along_axis(func1d=em.compute_normalized_class_probas_doc,
+                                                               axis=self.vocab_axis,
+                                                               arr=self.unlabeled_count_data)
+
     def E_step(self, initial_step=False):
         if initial_step:
             # supervised: count data is all labeled
@@ -184,8 +203,7 @@ class EM_SSL(object):
             self.compute_all_thetas_for_labeled_data()
 
         else:
-            # supervised + unsupervised
-            raise Exception("not implemented")
+            self.compute_class_probas_unlabeled_data()
 
 
 """DRIVER FOR TESTING PURPOSES ONLY """
@@ -194,23 +212,33 @@ version = 'ten_pct_train_no_english_filter'
 main_dir = r'C:/Users/ivbarrie/Desktop/Projects/SSL'
 train_data_input_filepath = pathlib.PurePath(main_dir, 'train_preprocessed_v_%s.pkl' % version)
 train_labels_input_filepath = pathlib.PurePath(main_dir, 'train_labels_v_%s.pkl' % version)
-# train_count_vectorizer_filepath = pathlib.PurePath(main_dir, 'train_count_vectorizer_v_%s' % version)
+
+# Data Load and Set
 train_count_data = pickle.load(open(train_data_input_filepath, 'rb'))
 train_label_vals = pickle.load(open(train_labels_input_filepath, 'rb'))
+train_labeled_pct = 0.8
+n_labeled_samples = int(train_labeled_pct * len(train_count_data))
+labeled_count_data = train_count_data[: n_labeled_samples]
+train_label_vals = train_label_vals[: n_labeled_samples]
+unlabeled_count_data = train_count_data[n_labeled_samples:]
 
-# RUN EM (for now only sets up supervised data params)
-em = EM_SSL(labeled_count_data=train_count_data,
-            label_vals=train_label_vals)
+# RUN EM
+em = EM_SSL(labeled_count_data=labeled_count_data,
+            label_vals=train_label_vals,
+            unlabeled_count_data=unlabeled_count_data)
 em.E_step(initial_step=True)
+em.E_step(initial_step=False)
 
+# TODO: M_step + stopping criteria
 
-# TODO: add M_step with unlabeled data
-
-# Basic assertion tests
-assert np.isclose(a=np.sum(em.theta_j_per_class), b=1.0, atol=1e-5), "theta_j's should sum to 1"
+# ASSERTION TESTS (todo: write a seperate unit_test.py)
 assert em.word_counts_per_class.shape == (em.n_labels, em.vocab_size), "word counts per class has wrong shape"
-# Infernce example
-t = train_count_data[0]
-class_probas = em.compute_normalized_class_probas_doc(doc_word_counts=t)
-assert np.isclose(a=np.sum(class_probas), b=1.0, atol=1e-5), "inference class probas should sum to 1"
+assert np.isclose(a=np.sum(em.theta_j_per_class), b=1.0, atol=1e-5), "theta_j's should sum to 1"
+
+# Check computed class probas on unlabeled data
+for u_idx in range(len(em.unlabeled_count_data)):
+    assert np.isclose(a=np.sum(em.unlabeled_data_class_probas[u_idx]), b=1.0, atol=1e-5), \
+        "u_doc %d class probs should sum 1" % u_idx
+
 print("Congrats, all assertions passed.")
+
