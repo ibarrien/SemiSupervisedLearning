@@ -140,15 +140,22 @@ class EM_SSL(object):
             self.theta_jt_per_class[j] = theta_j_vocab
 
     def compute_doc_proba_per_class(self, doc_word_counts: np.ndarray) -> np.ndarray:
-        """For fixed doc x_i, for each class j compute P(x = x_i | class = j; theta) via Eq 3.2. """
+        """For fixed doc x_i, for each class j compute P(x = x_i | class = j; theta) via Eq 3.2.
+
+        Params:
+            doc_word_counts: representation of a single document, shape = (vocab_size,)
+        """
         doc_probas_per_class = np.zeros(self.n_labels)
         for j in self.ordered_labels_list:
-            doc_proba_j = np.prod(self.theta_jt_per_class[j] ** doc_word_counts, axis=self.vocab_axis)
+            doc_proba_j = np.prod(self.theta_jt_per_class[j] ** doc_word_counts, axis=0)
             doc_probas_per_class[j] = doc_proba_j
         return doc_probas_per_class
 
     def compute_unnormalized_class_probas_doc(self, doc_word_counts: np.ndarray) -> np.ndarray:
         """For fixed doc x_i, for each class j compute unnorm_P(c = j | x = x_i; theta)
+
+        Params:
+            doc_word_counts: representation of a single document, shape = (vocab_size,)
 
         Notes:
             Returns unnormalized factor, i.e. numerator of Eq 3.7 in SSL
@@ -159,7 +166,12 @@ class EM_SSL(object):
         return u_class_probas_doc
 
     def compute_normalized_class_probas_doc(self, doc_word_counts: np.ndarray):
-        """For fixed doc x_i, Eq 3.7 in SSL."""
+        """For fixed doc x_i and theta, and each j: compute P(c = j | x_i; theta) via Eq 3.7 in SSL.
+
+        Notes:
+            Main 'inference' method.
+            Used to compute class probas of unlabeled docs -> EM updates
+        """
         unnormalized_class_probas = self.compute_unnormalized_class_probas_doc(doc_word_counts=doc_word_counts)
         denom = np.sum(unnormalized_class_probas)
         normalized_class_probs = unnormalized_class_probas / denom
@@ -190,9 +202,15 @@ train_label_vals = pickle.load(open(train_labels_input_filepath, 'rb'))
 em = EM_SSL(labeled_count_data=train_count_data,
             label_vals=train_label_vals)
 em.E_step(initial_step=True)
+
+
 # TODO: add M_step with unlabeled data
 
 # Basic assertion tests
 assert np.isclose(a=np.sum(em.theta_j_per_class), b=1.0, atol=1e-5), "theta_j's should sum to 1"
 assert em.word_counts_per_class.shape == (em.n_labels, em.vocab_size), "word counts per class has wrong shape"
+# Infernce example
+t = train_count_data[0]
+class_probas = em.compute_normalized_class_probas_doc(doc_word_counts=t)
+assert np.isclose(a=np.sum(class_probas), b=1.0, atol=1e-5), "inference class probas should sum to 1"
 print("Congrats, all assertions passed.")
