@@ -49,6 +49,7 @@ class EM_SSL(object):
         # Static vals
         self.labeled_count_data = labeled_count_data  # (n_docs, n_words) LABELED COUNT DATA
         self.unlabeled_count_data = unlabeled_count_data
+        self.n_unlabeled_docs = len(self.unlabeled_count_data)
         self.vocab_axis = vocab_axis
         self.doc_axis = doc_axis
         self.label_vals = label_vals
@@ -59,94 +60,120 @@ class EM_SSL(object):
         labels_list.sort(reverse=False)
         self.ordered_labels_list = labels_list
         self.n_labels = len(self.label_set)
+        self.n_labeled_docs_per_class = {}  # populated only once, in initial E_step
         # Dynamic vals: defined and updated in EM
+        self.curr_class_idx = 0  # current class label, used to subset data
+        self.only_labeled_data = True  # whehter current data is fully labeled (False => leverage unlabeled)
         self.count_data = self.labeled_count_data  # union w/ unlabeled after EM param initialization
         self.n_docs = len(self.count_data)  # initialize, later add unlabeled
         self.class_mask = np.array([])
         self.this_class_count_data = np.array([])
-        self.n_docs_in_class: float = 0  # given class j, num docs in class (float if unlabeled data)
         self.theta_j: float = 0  # Naive Bayes class prob of class j
         # Hash maps of statistics
         self.theta_j_per_class = np.zeros(self.n_labels)  # vals = theta_j: float
         self.theta_jt_per_class = np.zeros([self.n_labels, self.vocab_size])  # vals = theta_jt: np.ndarray
         self.n_docs_per_class = np.zeros(self.n_labels)   # vals = num docs: int
         self.total_word_count_per_class = np.zeros(self.n_labels)  # vals: total words: int
+        self.labeled_word_counts_per_class = np.zeros([self.n_labels, self.vocab_size])
         self.word_counts_per_class = np.zeros([self.n_labels, self.vocab_size])  # vals = word_counts: np.ndarray
-        self.unlabeled_data_class_probas = np.array([])  # (n_unlabeled_docs, n_labels)
+        self.unlabeled_this_class_probas = np.zeros(self.n_unlabeled_docs)  # for single j, each x_u: P(c=j | x_u)
+        self.unlabeled_data_class_probas = np.array([self.n_unlabeled_docs, self.n_labels])  # [P(c=j | x_u)]
 
-    def set_in_class_mask(self, class_idx: int = 0):
+    def set_in_class_mask(self):
         """Data mask of class label."""
-        self.class_mask = self.label_vals == class_idx
+        self.class_mask = self.label_vals == self.curr_class_idx
 
-    def set_count_data_in_class(self):
+    def set_this_class_count_data(self):
         """Set word count of labeled data subset corresponding to a class."""
-        self.this_class_count_data = self.count_data[self.class_mask]
+        if self.only_labeled_data:
+            # select labeled data in class
+            self.this_class_count_data = self.count_data[self.class_mask]
+        else:
+            # need all unlabeled data since class membership is a probability
+            self.this_class_count_data = self.unlabeled_count_data  # (n_docs, n_labels)
 
-    def compute_doc_counts_in_class(self, only_labeled_data=True) -> float:
+    def compute_doc_counts_in_class(self) -> float:
         """Compute n_j: num (potentially fractional) documents with class label. Assumes class mask is set."""
-        n_docs_in_class = 0.0
-        if only_labeled_data:
+        if self.only_labeled_data:
             n_docs_in_class = np.sum(self.class_mask, axis=0)
-        return n_docs_in_class
+            # Static (fixed) labeled docs class counts: computed only once
+            self.n_labeled_docs_per_class[self.curr_class_idx] = n_docs_in_class
+            # Dynamically updated
+            self.n_docs_per_class[self.curr_class_idx] = n_docs_in_class  # {N_j}_j, updated in E_step
+        else:
+            self.unlabeled_this_class_probas = self.unlabeled_data_class_probas[:, self.curr_class_idx]
+            fractional_docs_in_class = np.sum(self.unlabeled_this_class_probas)
+            self.n_docs_per_class[self.curr_class_idx] = \
+                self.n_labeled_docs_per_class[self.curr_class_idx] + fractional_docs_in_class
 
-    def compute_theta_j(self, n_docs_in_class: float, only_labeled_data=True) -> float:
+    def compute_theta_j(self):
         """Compute single class proba = P(class = j | theta) via Eq 3.6. Assumes class mask is set."""
-        theta_j = 0.0
-        if only_labeled_data:
-            theta_j = (n_docs_in_class + 1) / (self.n_docs + self.n_labels)
-        return theta_j
+        # theta_j = 0.0
+        n_docs_in_class = self.n_docs_per_class[self.curr_class_idx]
+        theta_j = (n_docs_in_class + 1) / (self.n_docs + self.n_labels)
+        self.theta_j_per_class[self.curr_class_idx] = theta_j
 
-    def compute_word_counts_in_class(self, class_count_data: np.ndarray, only_labeled_data: bool = True) -> np.ndarray:
+    def compute_word_counts_in_class(self):
         """For given class j (implicit), compute each words' count.
 
         Params:
-            class_count_data (np.ndarray): word count_data in given a fixed class
+            class_count_data (np.ndarray): word count_data in fixed class if labeled, else all word count_data
             only_labeled_data (bool): whehter all count data is labeled
 
-        Returns:
+        Computes:
             n_jt (np.ndarray): vector of words' count in class_count_data
             n_jt.shape = (vocab_size,)
         """
-        n_jt_vect = np.array([])
-        if only_labeled_data:
-            n_jt_vect = np.sum(class_count_data, axis=self.doc_axis)
-
-        return n_jt_vect
+        if self.only_labeled_data:
+            n_jt_vect = np.sum(self.this_class_count_data, axis=self.doc_axis)
+            self.word_counts_per_class[self.curr_class_idx] = n_jt_vect  # (vocab_size,)
+            self.labeled_word_counts_per_class[self.curr_class_idx] = n_jt_vect  # fix a copy
+        else:
+            # For this class j, and each x_u: compute P(c = j|x_u, theta) * x_u
+            class_scaled_count_data = np.multiply(self.unlabeled_this_class_probas, self.unlabeled_count_data.T).T
+            # Compute prob scaled word counts across all unlabeled docs
+            unlabled_n_jt_vect = np.sum(class_scaled_count_data, axis=self.doc_axis)  # (vocab_size,)
+            self.word_counts_per_class[self.curr_class_idx] = \
+                self.labeled_word_counts_per_class[self.curr_class_idx] + unlabled_n_jt_vect  # (vocab_size,)
 
     @staticmethod
     def compute_total_words(word_count_data: np.ndarray) -> float:
         """Compute total amount of words, counting multiplicities (i.e. full frequency sum)."""
         return np.sum(word_count_data)
 
-    def compute_theta_vocab_j(self, word_counts_j: np.ndarray, total_word_count_j: float) -> np.ndarray:
+    def compute_total_words_in_class(self):
+        """Compute total (potentially fractional) total words in current class."""
+        # word_counts_per_class is already labeled_data/ +unlabeled aware
+        self.total_word_count_per_class[self.curr_class_idx] = np.sum(self.word_counts_per_class[self.curr_class_idx])
+
+    def compute_theta_vocab_j(self):
         """For each word t and fixed class j, compute theta_tj values via Eq. 3.5:
             theta_tj = (1 + count_of_word_t_in_class_j) / (vocab_size + total_sum_words_class_j)
 
-        Returns:
+        Computes:
             theta_j_vocab: shape(words_counts_j) = (vocab_size, )
         """
+        word_counts_j = self.word_counts_per_class[self.curr_class_idx]
+        total_word_count_j = self.total_word_count_per_class[self.curr_class_idx]
         theta_j_vocab = (1 + word_counts_j) / (self.vocab_size + total_word_count_j)  # Eq 3.5
-        return theta_j_vocab
+        self.theta_jt_per_class[self.curr_class_idx] = theta_j_vocab
 
-    def compute_all_thetas_for_labeled_data(self):
+    def compute_all_thetas(self):
         """For each class j, labeled docs, and words, compute the "mixture" theta:
             [theta_j] and  [theta_jt: t in words = vocab]
         These are the maximum a posteriori (MAP) estimates of the Naive Bayes model.
         """
         for j in self.ordered_labels_list:
-            self.set_in_class_mask(class_idx=j)
-            self.set_count_data_in_class()  # -> self.this_class_count_data
-            n_docs_in_class = self.compute_doc_counts_in_class()
-            self.n_docs_per_class[j] = n_docs_in_class  # {N_j}_j, only updated in EM
-            theta_j = self.compute_theta_j(n_docs_in_class=n_docs_in_class)  # single class proba, not indexed by words
-            self.theta_j_per_class[j] = theta_j
-            word_counts_j = self.compute_word_counts_in_class(class_count_data=self.this_class_count_data)
-            self.word_counts_per_class[j] = word_counts_j  # {N_jt: t in vocab}_j, only update in EM
-            total_word_count_j = self.compute_total_words(word_count_data=word_counts_j)
-            self.total_word_count_per_class[j] = total_word_count_j
-            theta_j_vocab = self.compute_theta_vocab_j(word_counts_j=word_counts_j,
-                                                       total_word_count_j=total_word_count_j)
-            self.theta_jt_per_class[j] = theta_j_vocab
+            self.curr_class_idx = j
+            if self.only_labeled_data:
+                self.set_in_class_mask()
+            # else: leverage labeled_data + unlabeled_data
+            self.set_this_class_count_data()  # if unlabeled, then leverage all unlabeled data
+            self.compute_doc_counts_in_class()  # -> self.n_docs_per_class
+            self.compute_theta_j()  # -> self.theta_j_per_class
+            self.compute_word_counts_in_class()  # -> self.word_counts_per_class
+            self.compute_total_words_in_class()  # -> self.total_word_count_per_class
+            self.compute_theta_vocab_j()
 
     def compute_doc_proba_per_class(self, doc_word_counts: np.ndarray) -> np.ndarray:
         """For fixed doc x_i, for each class j compute P(x = x_i | class = j; theta) via Eq 3.2.
@@ -190,20 +217,34 @@ class EM_SSL(object):
         return normalized_class_probs
 
     def compute_class_probas_unlabeled_data(self):
-        """For each unlabeled doc x_u and class j, compute P(c = j | x_u, theta)."""
+        """For each unlabeled doc x_u and class j, compute P(c = j | x_u, theta).
+
+        Notes:
+            shape(unlabeled_data_class_probas) = (n_unlabeled_docs, n_labels)
+        """
         # np.array([self.compute_normalized_class_probas_doc(u) for u in self.unlabeled_count_data])
         self.unlabeled_data_class_probas = np.apply_along_axis(func1d=em.compute_normalized_class_probas_doc,
                                                                axis=self.vocab_axis,
                                                                arr=self.unlabeled_count_data)
 
-    def E_step(self, initial_step=False):
-        if initial_step:
-            # supervised: count data is all labeled
-            assert self.count_data.shape == self.labeled_count_data.shape, "First E_step is not all labeled data"
-            self.compute_all_thetas_for_labeled_data()
+    def initialize_EM_step(self):
+        self.only_labeled_data = True
+        assert self.count_data.shape == self.labeled_count_data.shape, "First E_step is not all labeled data"
+        self.compute_all_thetas()
+        # after initial E_step, leverage unlabeled data in statistics
+        self.only_labeled_data = False
+        self.compute_class_probas_unlabeled_data()
+        # update total number of documents being leveraged
+        self.n_docs = len(self.labeled_count_data) + len(self.unlabeled_count_data)
 
-        else:
-            self.compute_class_probas_unlabeled_data()
+    def E_step(self):
+        """For each unlabeled doc and current theta, compute class probas."""
+        self.compute_class_probas_unlabeled_data()  # self.unlabeled_data_class_probas
+
+    def M_step(self):
+        """Re-estimate theta using (fractional) unlabeled class probas."""
+        self.compute_all_thetas()
+
 
 
 """DRIVER FOR TESTING PURPOSES ONLY """
@@ -223,13 +264,21 @@ train_label_vals = train_label_vals[: n_labeled_samples]
 unlabeled_count_data = train_count_data[n_labeled_samples:]
 
 # RUN EM
+# TODO: loss function + stopping criteria
 em = EM_SSL(labeled_count_data=labeled_count_data,
             label_vals=train_label_vals,
             unlabeled_count_data=unlabeled_count_data)
-em.E_step(initial_step=True)
-em.E_step(initial_step=False)
-
-# TODO: M_step + stopping criteria
+em.initialize_EM_step()
+print('total word count in class 1, after initialization step: ', em.total_word_count_per_class[1])
+em.M_step()
+# total word counts likely to change in M_step, unless EM converged
+print('total word count in class 1, after M_step: ', em.total_word_count_per_class[1])
+em.E_step()
+# total word counts should not change after E_step
+print('total word count in class 1, after E_step: ', em.total_word_count_per_class[1])
+em.M_step()
+# total word counts likely to change in M_step, unless EM converged
+print('total word count in class 1, after M_step ', em.total_word_count_per_class[1])
 
 # ASSERTION TESTS (todo: write a seperate unit_test.py)
 assert em.word_counts_per_class.shape == (em.n_labels, em.vocab_size), "word counts per class has wrong shape"
