@@ -193,7 +193,10 @@ class EM_SSL(object):
         """For fixed doc x_i, for each class j compute unnorm_P(c = j | x = x_i; theta)
 
         Params:
-            doc_word_counts: representation of a single document, shape = (vocab_size,)
+            doc_word_counts: representation of a single document, shape = (vocab_size, )
+
+        Computes:
+            P(c = j | theta) * P(x_i | c = j; theta), shape = (n_labels, )
 
         Notes:
             Returns unnormalized factor, i.e. numerator of Eq 3.7 in SSL
@@ -227,24 +230,79 @@ class EM_SSL(object):
                                                                axis=self.vocab_axis,
                                                                arr=self.unlabeled_count_data)
 
-    def initialize_EM_step(self):
-        self.only_labeled_data = True
-        assert self.count_data.shape == self.labeled_count_data.shape, "First E_step is not all labeled data"
-        self.compute_all_thetas()
-        # after initial E_step, leverage unlabeled data in statistics
-        self.only_labeled_data = False
-        self.compute_class_probas_unlabeled_data()
-        # update total number of documents being leveraged
-        self.n_docs = len(self.labeled_count_data) + len(self.unlabeled_count_data)
-
     def E_step(self):
-        """For each unlabeled doc and current theta, compute class probas."""
+        """Estimate expectations, given current model params.
+
+        Computes:
+            For each unlabeled doc and current theta, compute class probas.
+        """
         self.compute_class_probas_unlabeled_data()  # self.unlabeled_data_class_probas
 
     def M_step(self):
-        """Re-estimate theta using (fractional) unlabeled class probas."""
+        """Maximize likelihood of model params using current expecations
+
+        Computes: Re-estimate of theta using (fractional) unlabeled class probas.
+        """
         self.compute_all_thetas()
 
+    def initialize_EM(self):
+        """Initial computations prior to expecation-maximization loop."""
+        self.only_labeled_data = True
+        assert self.count_data.shape == self.labeled_count_data.shape, "First E_step is not all labeled data"
+        self.M_step()  # Builds the initial NBC thetas from labeled docs only
+        self.only_labeled_data = False
+        # update total number of documents being leveraged
+        self.n_docs = len(self.labeled_count_data) + len(self.unlabeled_count_data)
+
+    def compute_labeled_loss(self) -> float:
+        """Compute loss attributed to labeled data.
+
+        sum_{x labeled} log (P(class(x) | theta).P(x | c = class(x), theta
+        """
+        joint_probas = np.apply_along_axis(func1d=self.compute_unnormalized_class_probas_doc,
+                                           axis=self.vocab_axis,
+                                           arr=self.labeled_count_data)
+        # joint_probas shape = (n_train_count, n_labels)
+        self.joint_probas_of_label = np.array([joint_probas[k][self.label_vals[k]]
+                                              for k in range(len(joint_probas))])
+
+        loss = np.sum(np.log(self.joint_probas_of_label))  # sum across all labeled docs
+
+        return loss
+
+    def compute_unlabeled_loss(self) -> float:
+        joint_probas = np.apply_along_axis(func1d=self.compute_unnormalized_class_probas_doc,
+                                         axis=self.vocab_axis,
+                                         arr=self.unlabeled_count_data)
+        # joint_probas_per_class shape = (n_train_count, n_labels)
+        join_probas_across_classes = np.sum(joint_probas, axis=1)
+        loss = np.sum(np.log(join_probas_across_classes))  # sum across all unlabeled docs
+        return loss
+
+    def compute_total_loss(self) -> float:
+        """Compute - (log(P(theta)) + loss(labeled_data) + loss(unlabeled_data))
+
+        Returns:
+            Total log loss >= 0.
+
+        Notes:
+            "Our prior distribution is formed with the product of Dirichlet distributions: one
+            for each class multinomial and one for the overall class probabilities
+
+        ToDo: compute P(theta) = prior distribution over (all?) paremeters
+        """
+        total_loss = self.compute_labeled_loss() + self.compute_unlabeled_loss()
+        return -total_loss
+
+    def run_EM_loop(self, max_n_iter=5):
+        """Run expectation maximization until delta convergence or max iters."""
+        self.initialize_EM()
+        for _ in range(max_n_iter):
+            # TODO: add delta improvement criterion for early stopping
+            curr_loss = self.compute_total_loss()
+            print('curr loss: %0.2f' % curr_loss)
+            self.E_step()
+            self.M_step()
 
 
 """DRIVER FOR TESTING PURPOSES ONLY """
@@ -268,17 +326,8 @@ unlabeled_count_data = train_count_data[n_labeled_samples:]
 em = EM_SSL(labeled_count_data=labeled_count_data,
             label_vals=train_label_vals,
             unlabeled_count_data=unlabeled_count_data)
-em.initialize_EM_step()
-print('total word count in class 1, after initialization step: ', em.total_word_count_per_class[1])
-em.M_step()
-# total word counts likely to change in M_step, unless EM converged
-print('total word count in class 1, after M_step: ', em.total_word_count_per_class[1])
-em.E_step()
-# total word counts should not change after E_step
-print('total word count in class 1, after E_step: ', em.total_word_count_per_class[1])
-em.M_step()
-# total word counts likely to change in M_step, unless EM converged
-print('total word count in class 1, after M_step ', em.total_word_count_per_class[1])
+
+em.run_EM_loop()
 
 # ASSERTION TESTS (todo: write a seperate unit_test.py)
 assert em.word_counts_per_class.shape == (em.n_labels, em.vocab_size), "word counts per class has wrong shape"
@@ -288,6 +337,7 @@ assert np.isclose(a=np.sum(em.theta_j_per_class), b=1.0, atol=1e-5), "theta_j's 
 for u_idx in range(len(em.unlabeled_count_data)):
     assert np.isclose(a=np.sum(em.unlabeled_data_class_probas[u_idx]), b=1.0, atol=1e-5), \
         "u_doc %d class probs should sum 1" % u_idx
+
 
 print("Congrats, all assertions passed.")
 
