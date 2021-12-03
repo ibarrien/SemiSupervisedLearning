@@ -275,8 +275,8 @@ class EM_SSL(object):
                                          axis=self.vocab_axis,
                                          arr=self.unlabeled_count_data)
         # joint_probas_per_class shape = (n_train_count, n_labels)
-        join_probas_across_classes = np.sum(joint_probas, axis=1)
-        loss = np.sum(np.log(join_probas_across_classes))  # sum across all unlabeled docs
+        joint_probas_across_classes = np.sum(joint_probas, axis=1)
+        loss = np.sum(np.log(joint_probas_across_classes))  # sum across all unlabeled docs
         return loss
 
     def compute_total_loss(self) -> float:
@@ -322,7 +322,6 @@ train_label_vals = train_label_vals[: n_labeled_samples]
 unlabeled_count_data = train_count_data[n_labeled_samples:]
 
 # RUN EM
-# TODO: loss function + stopping criteria
 em = EM_SSL(labeled_count_data=labeled_count_data,
             label_vals=train_label_vals,
             unlabeled_count_data=unlabeled_count_data)
