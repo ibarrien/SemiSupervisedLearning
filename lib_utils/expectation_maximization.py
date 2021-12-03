@@ -152,6 +152,9 @@ class EM_SSL(object):
 
         Computes:
             theta_j_vocab: shape(words_counts_j) = (vocab_size, )
+
+        Nots:
+            theta_jt_per_class.shape = (n_classes, vocab_size)
         """
         word_counts_j = self.word_counts_per_class[self.curr_class_idx]
         total_word_count_j = self.total_word_count_per_class[self.curr_class_idx]
@@ -254,6 +257,23 @@ class EM_SSL(object):
         # update total number of documents being leveraged
         self.n_docs = len(self.labeled_count_data) + len(self.unlabeled_count_data)
 
+    def compute_prior_loss(self) -> float:
+        """Compute log(P(theta)).
+
+        Notes:
+            Assume a factorized prior = P(theta_j).P(theta_tj)
+            Recall that Dirchlet priors each have \alpha = 2 => \alpha - 1 = 1
+            Hence, take direct products of theta elements
+        """
+        # Compute log(P(theta_jt)) = log(prod_{i, j} theta_ij) = sum_i(sum_j (theta_ij))
+        thtea_jt_log = np.log(self.theta_jt_per_class)  # shape = (n_classes, vocab_size)
+        log_proba_theta_jt = np.sum(np.sum(thtea_jt_log, axis=0))  # float
+
+        # Compute log(P(theta_j))
+        log_proba_theta_j = np.sum(np.log(self.theta_j_per_class))  # float
+
+        return log_proba_theta_j + log_proba_theta_jt
+
     def compute_labeled_loss(self) -> float:
         """Compute loss attributed to labeled data.
 
@@ -280,7 +300,7 @@ class EM_SSL(object):
         return loss
 
     def compute_total_loss(self) -> float:
-        """Compute - (log(P(theta)) + loss(labeled_data) + loss(unlabeled_data))
+        """Compute: -(log(P(theta)) + log(P(labeled_data)) + log(P(unlabeled_data))
 
         Returns:
             Total log loss >= 0.
@@ -289,9 +309,8 @@ class EM_SSL(object):
             "Our prior distribution is formed with the product of Dirichlet distributions: one
             for each class multinomial and one for the overall class probabilities
 
-        ToDo: compute P(theta) = prior distribution over (all?) paremeters
         """
-        total_loss = self.compute_labeled_loss() + self.compute_unlabeled_loss()
+        total_loss = self.compute_prior_loss() + self.compute_labeled_loss() + self.compute_unlabeled_loss()
         return -total_loss
 
     def run_EM_loop(self, max_n_iter=5):
