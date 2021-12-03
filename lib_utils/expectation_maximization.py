@@ -262,7 +262,7 @@ class EM_SSL(object):
 
         Notes:
             Assume a factorized prior = P(theta_j).P(theta_tj)
-            Recall that Dirchlet priors each have \alpha = 2 => \alpha - 1 = 1
+            Recall Dirchlet priors each have \alpha = 2 => \alpha - 1 = 1
             Hence, take direct products of theta elements
         """
         # Compute log(P(theta_jt)) = log(prod_{i, j} theta_ij) = sum_i(sum_j (theta_ij))
