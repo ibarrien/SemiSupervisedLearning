@@ -59,7 +59,8 @@ class EM_SSL(object):
         self.max_em_iters = max_em_iters
         self.min_em_loss_delta = min_em_loss_delta
         self.vocab_size = np.shape(self.labeled_count_data)[self.vocab_axis]
-        assert len(self.labeled_count_data) == len(label_vals)
+        assert len(self.labeled_count_data) == len(label_vals), \
+            "Num labeled data = %d != num labels = %d" % len(self.labeled_count_data)
         self.label_set = set(np.unique(label_vals))
         labels_list = list(self.label_set)
         labels_list.sort(reverse=False)
@@ -328,7 +329,7 @@ class EM_SSL(object):
             print('curr loss: %0.2f' % curr_loss)
             self.E_step()
             self.M_step()
-            delta_improvement = prev_loss - curr_loss  # expect 0<= curr_loss <= prev_loss
+            delta_improvement = prev_loss - curr_loss  # expect 0 <= curr_loss <= prev_loss
             if delta_improvement < self.min_em_loss_delta:
                 print('Early stopping EM: delta improvement = %0.4f < min_delta = %0.4f'
                       % (delta_improvement, self.min_em_loss_delta))
