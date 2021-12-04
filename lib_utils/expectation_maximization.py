@@ -37,6 +37,8 @@ class EM_SSL(object):
             unlabeled_count_data (np.ndarray): count data without label vals
             doc_axis (int): index for documents
             vocab_axis (int): index for word counts, i.e. vocab axis
+            max_em_iters (int): max num EM iterations
+            min_em_loss_delta (float): min improvement in non-negative loss during EM iterations
 
         Notes:
             Input count data can be implemented as a count vectorizer on bag of words
@@ -44,7 +46,8 @@ class EM_SSL(object):
     """
     def __init__(self, labeled_count_data: np.ndarray, label_vals: np.ndarray,
                  unlabeled_count_data: np.ndarray,
-                 doc_axis: int = 0, vocab_axis: int = 1):
+                 doc_axis: int = 0, vocab_axis: int = 1,
+                 max_em_iters=10, min_em_loss_delta=1e-2):
 
         # Static vals
         self.labeled_count_data = labeled_count_data  # (n_docs, n_words) LABELED COUNT DATA
@@ -53,6 +56,8 @@ class EM_SSL(object):
         self.vocab_axis = vocab_axis
         self.doc_axis = doc_axis
         self.label_vals = label_vals
+        self.max_em_iters = max_em_iters
+        self.min_em_loss_delta = min_em_loss_delta
         self.vocab_size = np.shape(self.labeled_count_data)[self.vocab_axis]
         assert len(self.labeled_count_data) == len(label_vals)
         self.label_set = set(np.unique(label_vals))
@@ -265,9 +270,9 @@ class EM_SSL(object):
             Recall Dirchlet priors each have \alpha = 2 => \alpha - 1 = 1
             Hence, take direct products of theta elements
         """
-        # Compute log(P(theta_jt)) = log(prod_{i, j} theta_ij) = sum_i(sum_j (theta_ij))
-        thtea_jt_log = np.log(self.theta_jt_per_class)  # shape = (n_classes, vocab_size)
-        log_proba_theta_jt = np.sum(np.sum(thtea_jt_log, axis=0))  # float
+        # Compute log(P(theta_jt)) = log(prod_{i, j} theta_ij) = sum_{i,_j} (log(theta_ij)))
+        theta_jt_log = np.log(self.theta_jt_per_class)  # shape = (n_classes, vocab_size)
+        log_proba_theta_jt = np.sum(np.sum(theta_jt_log, axis=0))  # float
 
         # Compute log(P(theta_j))
         log_proba_theta_j = np.sum(np.log(self.theta_j_per_class))  # float
@@ -282,21 +287,21 @@ class EM_SSL(object):
         joint_probas = np.apply_along_axis(func1d=self.compute_unnormalized_class_probas_doc,
                                            axis=self.vocab_axis,
                                            arr=self.labeled_count_data)
-        # joint_probas shape = (n_train_count, n_labels)
-        self.joint_probas_of_label = np.array([joint_probas[k][self.label_vals[k]]
-                                              for k in range(len(joint_probas))])
+        # joint_factors shape = (n_train_count, n_labels): unnormalized "joint"
+        joint_factors_labeled_data = np.array([joint_probas[k][self.label_vals[k]]
+                                               for k in range(len(joint_probas))])
 
-        loss = np.sum(np.log(self.joint_probas_of_label))  # sum across all labeled docs
+        loss = np.sum(np.log(joint_factors_labeled_data))  # sum across all labeled docs
 
         return loss
 
     def compute_unlabeled_loss(self) -> float:
-        joint_probas = np.apply_along_axis(func1d=self.compute_unnormalized_class_probas_doc,
-                                         axis=self.vocab_axis,
-                                         arr=self.unlabeled_count_data)
-        # joint_probas_per_class shape = (n_train_count, n_labels)
-        joint_probas_across_classes = np.sum(joint_probas, axis=1)
-        loss = np.sum(np.log(joint_probas_across_classes))  # sum across all unlabeled docs
+        joint_factors = np.apply_along_axis(func1d=self.compute_unnormalized_class_probas_doc,
+                                            axis=self.vocab_axis,
+                                            arr=self.unlabeled_count_data)
+        # joint_factors_per_class shape = (n_train_count, n_labels)
+        joint_factors_across_classes = np.sum(joint_factors, axis=1)
+        loss = np.sum(np.log(joint_factors_across_classes))  # sum across all unlabeled docs
         return loss
 
     def compute_total_loss(self) -> float:
@@ -313,15 +318,21 @@ class EM_SSL(object):
         total_loss = self.compute_prior_loss() + self.compute_labeled_loss() + self.compute_unlabeled_loss()
         return -total_loss
 
-    def run_EM_loop(self, max_n_iter=5):
+    def run_EM_loop(self):
         """Run expectation maximization until delta convergence or max iters."""
         self.initialize_EM()
-        for _ in range(max_n_iter):
-            # TODO: add delta improvement criterion for early stopping
+        curr_loss = np.inf
+        for _ in range(self.max_em_iters):
+            prev_loss = curr_loss
             curr_loss = self.compute_total_loss()
             print('curr loss: %0.2f' % curr_loss)
             self.E_step()
             self.M_step()
+            delta_improvement = prev_loss - curr_loss  # expect 0<= curr_loss <= prev_loss
+            if delta_improvement < self.min_em_loss_delta:
+                print('Early stopping EM: delta improvement = %0.4f < min_delta = %0.4f'
+                      % (delta_improvement, self.min_em_loss_delta))
+                break
 
 
 """DRIVER FOR TESTING PURPOSES ONLY """
@@ -343,7 +354,9 @@ unlabeled_count_data = train_count_data[n_labeled_samples:]
 # RUN EM
 em = EM_SSL(labeled_count_data=labeled_count_data,
             label_vals=train_label_vals,
-            unlabeled_count_data=unlabeled_count_data)
+            unlabeled_count_data=unlabeled_count_data,
+            max_em_iters=10,
+            min_em_loss_delta=2e-4)
 
 em.run_EM_loop()
 
