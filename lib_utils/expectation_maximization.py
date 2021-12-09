@@ -220,7 +220,7 @@ class EM_SSL(object):
         """For fixed doc x_i and theta, and each j: compute P(c = j | x_i; theta) via Eq 3.7 in SSL.
 
         Notes:
-            Main 'inference' method.
+            Main 'inference' method, i.e. model predictions for class membership.
             Used to compute class probas of unlabeled docs -> EM updates
         """
         unnormalized_class_probas = self.compute_unnormalized_class_probas_doc(doc_word_counts=doc_word_counts)
@@ -235,7 +235,7 @@ class EM_SSL(object):
             shape(unlabeled_data_class_probas) = (n_unlabeled_docs, n_labels)
         """
         # np.array([self.compute_normalized_class_probas_doc(u) for u in self.unlabeled_count_data])
-        self.unlabeled_data_class_probas = np.apply_along_axis(func1d=em.compute_normalized_class_probas_doc,
+        self.unlabeled_data_class_probas = np.apply_along_axis(func1d=self.compute_normalized_class_probas_doc,
                                                                axis=self.vocab_axis,
                                                                arr=self.unlabeled_count_data)
 
@@ -336,40 +336,5 @@ class EM_SSL(object):
                 break
 
 
-"""DRIVER FOR TESTING PURPOSES ONLY """
-# PATHS
-version = 'ten_pct_train_no_english_filter'
-main_dir = r'C:/Users/ivbarrie/Desktop/Projects/SSL'
-train_data_input_filepath = pathlib.PurePath(main_dir, 'train_preprocessed_v_%s.pkl' % version)
-train_labels_input_filepath = pathlib.PurePath(main_dir, 'train_labels_v_%s.pkl' % version)
 
-# Data Load and Set
-train_count_data = pickle.load(open(train_data_input_filepath, 'rb'))
-train_label_vals = pickle.load(open(train_labels_input_filepath, 'rb'))
-train_labeled_pct = 0.8
-n_labeled_samples = int(train_labeled_pct * len(train_count_data))
-labeled_count_data = train_count_data[: n_labeled_samples]
-train_label_vals = train_label_vals[: n_labeled_samples]
-unlabeled_count_data = train_count_data[n_labeled_samples:]
-
-# RUN EM
-em = EM_SSL(labeled_count_data=labeled_count_data,
-            label_vals=train_label_vals,
-            unlabeled_count_data=unlabeled_count_data,
-            max_em_iters=10,
-            min_em_loss_delta=2e-4)
-
-em.run_EM_loop()
-
-# ASSERTION TESTS (todo: write a seperate unit_test.py)
-assert em.word_counts_per_class.shape == (em.n_labels, em.vocab_size), "word counts per class has wrong shape"
-assert np.isclose(a=np.sum(em.theta_j_per_class), b=1.0, atol=1e-5), "theta_j's should sum to 1"
-
-# Check computed class probas on unlabeled data
-for u_idx in range(len(em.unlabeled_count_data)):
-    assert np.isclose(a=np.sum(em.unlabeled_data_class_probas[u_idx]), b=1.0, atol=1e-5), \
-        "u_doc %d class probs should sum 1" % u_idx
-
-
-print("Congrats, all assertions passed.")
 
