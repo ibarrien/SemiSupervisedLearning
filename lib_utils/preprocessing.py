@@ -128,32 +128,50 @@ class TextPreProcessor:
 
         return data_bunch
 
-    def fetch_train_raw_data(self):
-        """Fetch raw train data; this method should only be called once"""
+    def set_static_full_train_raw_data(self):
+        """Fetch raw train data; this method should only be called once."""
+        # TODO: make optional if full train is already downloaded/cached
         self.full_train_bunch = self.load_data(subset='train')  # 11,314  total samples
         self.full_train_label_names = self.full_train_bunch[self.label_names_key]  # List[str], len = 20
         self.full_train_data = np.array(self.full_train_bunch.data)  # np.ndarray[str]
+        print('full train raw data shape:', self.full_train_data.shape)
         self.full_train_label_vals = np.array(self.full_train_bunch[self.label_vals_key])  # List[str], len = len(self.train_data)
+        print('min, max full train data label vals = %d, %d'
+              % (min(self.full_train_label_vals), max(self.full_train_label_vals)))
 
     def set_static_raw_unlabeled_data(self):
         """Fix sample of 'unlabaled' data from full train."""
         self.unlabeled_train_indices = np.random.choice(a=range(len(self.full_train_data)),
                                                         size=self.n_unlabeled_train_samples,
                                                         replace=False)
-        self.unlabeled_train_data = self.full_train_data[self.unlabeled_train_indices]
-
-    def set_sample_raw_train_data(self):
-        """Select sample of train data; run once per eval iteration on varying train size."""
-        assert len(self.unlabeled_train_data) > 0, "Set unlabeled data before setting current labeled train sample."
+        self.unlabeled_train_data = np.array(self.full_train_data[self.unlabeled_train_indices])
+        print('unlabeled train data shape:', self.unlabeled_train_data.shape)
         self.avail_train_indices = list(set(range(len(self.full_train_data))) - set(self.unlabeled_train_indices))
+        print('num avail train indices complement to unlabeled: %d' % len(self.avail_train_indices))
         if not self.avail_train_indices:
             raise Exception("Sampling zero labeled train examples; decrease unlabeled sample size.")
-        print('Setting %d labeled train samples' % self.n_labeled_train_samples)
+
+    def set_n_labeled_train_samples(self, n: int) -> None:
+        """Set num (rand uniform) train samples to select."""
+        self.n_labeled_train_samples = n
+
+    def set_sample_raw_train_data(self):
+        """Select sample of train data from complement of unlabeled data.
+
+        Notes:
+            run once per eval iteration on varying train size."
+        """
+        assert len(self.unlabeled_train_data) > 0, "Set unlabeled data before setting current labeled train sample."
+        print('num train samples to select: %d' % self.n_labeled_train_samples)
         self.labeled_train_sample_indices = np.random.choice(a=self.avail_train_indices,
                                                       size=self.n_labeled_train_samples,
                                                       replace=False)
 
+
         self.labeled_train_data_sample = self.full_train_data[self.labeled_train_sample_indices]
+        print('at set_sample_raw_train_data')
+        print('size:', self.labeled_train_data_sample.shape)
+
         self.train_sample_label_vals = self.full_train_label_vals[self.labeled_train_sample_indices]
 
     def set_static_raw_test_data(self):
@@ -164,7 +182,7 @@ class TextPreProcessor:
 
     def process_text(self, text_list: np.ndarray) -> List[str]:
         """Apply basic text pre-processing to loaded data."""
-        print('received text_list:', text_list.shape, len(text_list))
+        # print('received text_list:', text_list.shape, len(text_list))
         x_proc = [_process_text(x, tokens_to_remove=self.tokens_to_remove, english_vocab=self.english_vocab)
                   for x in text_list]  # list of sentences
         return x_proc
@@ -187,6 +205,7 @@ class TextPreProcessor:
         if subset == 'train':
             # use count vectorizer to fit and transform on labeled train data
             self.count_vectorizer = CountVectorizer()
+
             if len(self.labeled_train_data_sample) == 0:
                 raise Exception("(raw) train data not set; run set_train_raw_data()")
             data = self.labeled_train_data_sample
@@ -205,8 +224,8 @@ class TextPreProcessor:
                 raise Exception("Preprocessing data type must be 'train', 'unlabeled', or 'test'")
             if len(data) == 0:
                 raise Exception("(raw) %s data not set; run\n set_test_raw_data()" % subset)
-            print('data shape = ', data.shape)
-            print('data type = ', type(data))
+            # print('data shape = ', data.shape)
+            # print('data type = ', type(data))
             x_proc = self.process_text(text_list=data)
             x_proc_vect = self.count_vectorizer.transform(x_proc)
         data_vect_array = x_proc_vect.toarray()
@@ -223,18 +242,20 @@ class TextPreProcessor:
         nonzero_doc_data = doc_count_data[mask]
         return nonzero_doc_data, mask
 
-    def set_labeled_train_count_data(self):
+    def set_labeled_train_sample_count_data(self):
         """Set np.ndarray of bag of words for (labeled) train set; rows: docs, cols: word counts.
 
         Notes:
             Since unlabeled data is random, this method does not apply to unlabeled dataset
         """
         self.labeled_train_sample_count_data = self.preprocess_data_to_array(subset="train")
+        print('labeled train sample count data before zero doc removal shape',
+              self.labeled_train_sample_count_data.shape)
         if self.remove_zero_vocab_docs:
             print("Removing zero vocab docs from labeled train sample.")
             self.labeled_train_sample_count_data, mask =\
                 self.remove_zero_count_docs(doc_count_data=self.labeled_train_sample_count_data)
-            original_labeled_train_size = len(self.labeled_train_sample_indices)
+            original_labeled_train_size = len(self.full_train_data)
             self.train_sample_label_vals = self.train_sample_label_vals[mask]
             print('After zero count doc removal:\n Kept %d samples from original %d train'
                   % (len(self.train_sample_label_vals), original_labeled_train_size))
@@ -244,20 +265,22 @@ class TextPreProcessor:
     def set_unlabeled_count_data(self):
         """Set np.ndarray of bag of words for unlabeled set; rows: docs, cols: word counts."""
         self.unlabeled_count_data = self.preprocess_data_to_array(subset='unlabeled')
-        # self.unlabeled_count_data = self.remove_zero_count_docs(doc_count_data=self.unlabeled_count_data)
+        self.unlabeled_count_data, _mask = self.remove_zero_count_docs(doc_count_data=self.unlabeled_count_data)
+        print('unlabeled count data shape', self.unlabeled_count_data.shape)
         return None
 
     def set_test_count_data(self):
         """Set np.ndarray of bag of words for test set; rows: docs, cols: word counts."""
         self.test_count_data = self.preprocess_data_to_array(subset='test')
-        # self.test_count_data = self.remove_zero_count_docs(doc_count_data=self.test_count_data)
+        self.test_count_data, _mask = self.remove_zero_count_docs(doc_count_data=self.test_count_data)
+        print('test count data shape', self.test_count_data.shape)
         return None
 
-    def get_doc_lens(self):
-        """Compute constant doc length via max len of train set."""
+    def get_train_doc_lengths(self, min_doc_len=20):
+        """Compute constant doc length via max (or median) len of train set."""
         self.train_doc_lens = np.sum(self.labeled_train_sample_count_data, axis=self.vocab_axis)
-        self.max_doc_len = np.max(self.labeled_train_sample_count_data)
-        self.med_doc_len = np.median(self.labeled_train_sample_count_data)
+        self.max_doc_len = max(min_doc_len, np.max(self.train_doc_lens))
+        self.med_doc_len = max(min_doc_len, np.median(self.train_doc_lens))
         return None
 
     @staticmethod
@@ -272,6 +295,7 @@ class TextPreProcessor:
         This constant is determined by the train dataset.
         np.ndarray -> np.ndarray
         """
+        self.get_train_doc_lengths()
         if strategy == 'median':
             static_doc_len = self.med_doc_len
         elif strategy == 'max':

@@ -47,7 +47,7 @@ class EM_SSL(object):
     def __init__(self, labeled_count_data: np.ndarray, label_vals: np.ndarray,
                  unlabeled_count_data: np.ndarray,
                  doc_axis: int = 0, vocab_axis: int = 1,
-                 max_em_iters=10, min_em_loss_delta=1e-2):
+                 max_em_iters=20, min_em_loss_delta=1e-2):
 
         # Static vals
         self.labeled_count_data = labeled_count_data  # (n_docs, n_words) LABELED COUNT DATA
@@ -61,11 +61,16 @@ class EM_SSL(object):
         self.vocab_size = np.shape(self.labeled_count_data)[self.vocab_axis]
         assert len(self.labeled_count_data) == len(label_vals), \
             "Num labeled data = %d != num labels = %d" % len(self.labeled_count_data)
+
         self.label_set = set(np.unique(label_vals))
+        """
         labels_list = list(self.label_set)
         labels_list.sort(reverse=False)
         self.ordered_labels_list = labels_list
-        self.n_labels = len(self.label_set)
+        """
+        self.ordered_labels_list = list(range(20))
+        self.n_labels = 20  # len(self.label_set)
+        print('labeled train sample has %d unique labels' % self.n_labels)
         self.n_labeled_docs_per_class = {}  # populated only once, in initial E_step
         # Dynamic vals: defined and updated in EM
         self.curr_class_idx = 0  # current class label, used to subset data
@@ -172,7 +177,8 @@ class EM_SSL(object):
             [theta_j] and  [theta_jt: t in words = vocab]
         These are the maximum a posteriori (MAP) estimates of the Naive Bayes model.
         """
-        for j in self.ordered_labels_list:
+        # for j in self.ordered_labels_list:
+        for j in self.label_set:
             self.curr_class_idx = j
             if self.only_labeled_data:
                 self.set_in_class_mask()
@@ -225,8 +231,13 @@ class EM_SSL(object):
         """
         unnormalized_class_probas = self.compute_unnormalized_class_probas_doc(doc_word_counts=doc_word_counts)
         denom = np.sum(unnormalized_class_probas)
-        normalized_class_probs = unnormalized_class_probas / denom
-        return normalized_class_probs
+        # if np.isclose(denom, 0):
+            # print("Warning: divide by zero warning for unnormalized class probas")
+            # print("May be due to small train samples and word count sparsity")
+        #    normalized_class_probas = unnormalized_class_probas
+        # else:
+        normalized_class_probas = unnormalized_class_probas / denom
+        return normalized_class_probas
 
     def compute_class_probas_unlabeled_data(self):
         """For each unlabeled doc x_u and class j, compute P(c = j | x_u, theta).
@@ -306,7 +317,7 @@ class EM_SSL(object):
         return loss
 
     def compute_total_loss(self) -> float:
-        """Compute: -(log(P(theta)) + log(P(labeled_data)) + log(P(unlabeled_data))
+        """Compute: -1 * (log(P(theta)) + log(P(labeled_data)) + log(P(unlabeled_data))
 
         Returns:
             Total log loss >= 0.
@@ -319,7 +330,7 @@ class EM_SSL(object):
         total_loss = self.compute_prior_loss() + self.compute_labeled_loss() + self.compute_unlabeled_loss()
         return -total_loss
 
-    def run_EM_loop(self):
+    def fit(self):
         """Run expectation maximization until delta convergence or max iters."""
         self.initialize_EM()
         curr_loss = np.inf
@@ -335,6 +346,21 @@ class EM_SSL(object):
                       % (delta_improvement, self.min_em_loss_delta))
                 break
 
+
+    def evaluate_on_data(self, count_data: np.array, label_vals: np.array) -> float:
+        pred_probas = np.apply_along_axis(func1d=self.compute_normalized_class_probas_doc,
+                                          axis=self.vocab_axis,
+                                          arr=count_data)
+
+        preds = np.argmax(pred_probas, axis=1)
+        print('print preds:', preds[:10])
+        print('labels:', label_vals[:10])
+        # TODO: update to final preds based on given conf thresh
+        correct_preds = preds == label_vals
+        #print(correct_preds[:10])
+        print(np.sum(correct_preds))
+        pct_correct = np.sum(correct_preds) / len(label_vals)
+        return pct_correct
 
 
 
