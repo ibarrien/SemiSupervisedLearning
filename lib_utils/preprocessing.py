@@ -56,18 +56,18 @@ def is_english(text: str, english_vocab: List[str]) -> str:
     return english_words_text
 
 
-def _process_text(text: str, tokens_to_remove: List[str],
-                 english_vocab: List[str], stemmer=None) -> str:
-    """Basic text processing."""
+def _process_text(document_as_single_str: str, tokens_to_remove: List[str] = None,
+                 english_vocab: List[str] = None, stemmer=None) -> str:
+    """Basic text processing on a single string."""
     # filtered.translate(str.maketrans('', '', string.punctuation))
-    filtered = text.lower()
+    filtered = document_as_single_str.lower()
     filtered = re.sub('[^a-zA-Z]', ' ', filtered)
     filtered = re.sub(r'\[[0-9]*\]', ' ', filtered)
-    filtered = re.sub(r'\s+', ' ', filtered)
-    filtered = re.sub(r'\s+', ' ', filtered)
+    filtered = re.sub(r'\s+', ' ', filtered)  # white space chars
     if stemmer:
         filtered = _stem(filtered, stemmer=stemmer)
-    filtered = remove_stop_words(filtered, tokens_to_remove=tokens_to_remove)
+    if tokens_to_remove:
+        filtered = remove_stop_words(filtered, tokens_to_remove=tokens_to_remove)
     if english_vocab:
         filtered = is_english(filtered, english_vocab=english_vocab)
     return filtered
@@ -180,11 +180,19 @@ class TextPreProcessor:
         self.full_test_data = np.array(full_test_bunch.data)  # List[str]
         self.full_test_label_vals = np.array(full_test_bunch[self.label_vals_key])
 
-    def process_text(self, text_list: np.ndarray) -> List[str]:
-        """Apply basic text pre-processing to loaded data."""
+    def process_documents_text(self, documents_array: np.ndarray) -> List[str]:
+        # Apply basic text pre-processing to loaded data.
         # print('received text_list:', text_list.shape, len(text_list))
-        x_proc = [_process_text(x, tokens_to_remove=self.tokens_to_remove, english_vocab=self.english_vocab)
-                  for x in text_list]  # list of sentences
+        assert len(documents_array) > 0, "Received no documents for text preprocessing"
+        if type(documents_array) == str or type(documents_array) == np.str_:
+            print("Warning in process_documents_text: "
+                  "received single doc as str, not array; converting to array")
+            documents_array = np.array([documents_array])
+        x_proc = [_process_text(document_as_single_str=doc,
+                                tokens_to_remove=self.tokens_to_remove,
+                                english_vocab=self.english_vocab)
+                  for doc in documents_array]
+
         return x_proc
 
     def preprocess_data_to_array(self, subset: str = 'train') -> np.ndarray:
@@ -209,7 +217,7 @@ class TextPreProcessor:
             if len(self.labeled_train_data_sample) == 0:
                 raise Exception("(raw) train data not set; run set_train_raw_data()")
             data = self.labeled_train_data_sample
-            x_proc = self.process_text(text_list=data)
+            x_proc = self.process_documents_text(documents_array=data)
             x_proc_vect = self.count_vectorizer.fit_transform(x_proc)  # scipy.sparse.csr.csr_matrix
             self.vocab = self.count_vectorizer.get_feature_names()  # List[str]
         else:
@@ -226,7 +234,7 @@ class TextPreProcessor:
                 raise Exception("(raw) %s data not set; run\n set_test_raw_data()" % subset)
             # print('data shape = ', data.shape)
             # print('data type = ', type(data))
-            x_proc = self.process_text(text_list=data)
+            x_proc = self.process_documents_text(documents_array=data)
             x_proc_vect = self.count_vectorizer.transform(x_proc)
         data_vect_array = x_proc_vect.toarray()
         return data_vect_array
@@ -265,14 +273,14 @@ class TextPreProcessor:
     def set_unlabeled_count_data(self):
         """Set np.ndarray of bag of words for unlabeled set; rows: docs, cols: word counts."""
         self.unlabeled_count_data = self.preprocess_data_to_array(subset='unlabeled')
-        self.unlabeled_count_data, _mask = self.remove_zero_count_docs(doc_count_data=self.unlabeled_count_data)
+        # self.unlabeled_count_data, _mask = self.remove_zero_count_docs(doc_count_data=self.unlabeled_count_data)
         print('unlabeled count data shape', self.unlabeled_count_data.shape)
         return None
 
     def set_test_count_data(self):
         """Set np.ndarray of bag of words for test set; rows: docs, cols: word counts."""
         self.test_count_data = self.preprocess_data_to_array(subset='test')
-        self.test_count_data, _mask = self.remove_zero_count_docs(doc_count_data=self.test_count_data)
+        # self.test_count_data, _mask = self.remove_zero_count_docs(doc_count_data=self.test_count_data)
         print('test count data shape', self.test_count_data.shape)
         return None
 

@@ -63,6 +63,8 @@ class EM_SSL(object):
             "Num labeled data = %d != num labels = %d" % len(self.labeled_count_data)
 
         self.label_set = set(np.unique(label_vals))
+        print('labeled train sample has %d unique labels' % len(self.label_set))
+
         """
         labels_list = list(self.label_set)
         labels_list.sort(reverse=False)
@@ -70,8 +72,7 @@ class EM_SSL(object):
         """
         self.ordered_labels_list = list(range(20))
         self.n_labels = 20  # len(self.label_set)
-        print('labeled train sample has %d unique labels' % self.n_labels)
-        self.n_labeled_docs_per_class = {}  # populated only once, in initial E_step
+        self.n_labeled_docs_per_class = np.zeros(self.n_labels)  # populated only once, in initial E_step
         # Dynamic vals: defined and updated in EM
         self.curr_class_idx = 0  # current class label, used to subset data
         self.only_labeled_data = True  # whehter current data is fully labeled (False => leverage unlabeled)
@@ -123,6 +124,8 @@ class EM_SSL(object):
         n_docs_in_class = self.n_docs_per_class[self.curr_class_idx]
         theta_j = (n_docs_in_class + 1) / (self.n_docs + self.n_labels)
         self.theta_j_per_class[self.curr_class_idx] = theta_j
+        if np.isclose(theta_j, 0):
+            print('WARNING: Got theta_j near zero for class=%d' % self.curr_class_idx)
 
     def compute_word_counts_in_class(self):
         """For given class j (implicit), compute each words' count.
@@ -159,18 +162,20 @@ class EM_SSL(object):
 
     def compute_theta_vocab_j(self):
         """For each word t and fixed class j, compute theta_tj values via Eq. 3.5:
-            theta_tj = (1 + count_of_word_t_in_class_j) / (vocab_size + total_sum_words_class_j)
+            P(w_t | c_j; theta) = (1 + count_of_word_t_in_class_j) / (vocab_size + total_sum_words_class_j)
 
         Computes:
             theta_j_vocab: shape(words_counts_j) = (vocab_size, )
 
-        Nots:
+        Notes:
+            If word_t has sparse count, then theta_jt -> 0
             theta_jt_per_class.shape = (n_classes, vocab_size)
         """
         word_counts_j = self.word_counts_per_class[self.curr_class_idx]
         total_word_count_j = self.total_word_count_per_class[self.curr_class_idx]
         theta_j_vocab = (1 + word_counts_j) / (self.vocab_size + total_word_count_j)  # Eq 3.5
-        self.theta_jt_per_class[self.curr_class_idx] = theta_j_vocab
+        self.theta_jt_per_class[self.curr_class_idx] = theta_j_vocab  # float
+        # TODO: theta_jt near zero => log(theta_jt) -> nan, when computing log loss
 
     def compute_all_thetas(self):
         """For each class j, labeled docs, and words, compute the "mixture" theta:
@@ -265,11 +270,20 @@ class EM_SSL(object):
         """
         self.compute_all_thetas()
 
+    def check_initial_M_step(self):
+        total_class_counts = np.sum(self.n_labeled_docs_per_class, axis=0)
+        n_labeled_train = self.labeled_count_data.shape[0]
+        print("Checking initail M step on only labeled train data...")
+        assert total_class_counts == n_labeled_train, "Total class count = %d != %d labeled train samples" % \
+            (total_class_counts, n_labeled_train)
+        print("Congrats, initial M step assertions passed.")
+
     def initialize_EM(self):
         """Initial computations prior to expecation-maximization loop."""
         self.only_labeled_data = True
         assert self.count_data.shape == self.labeled_count_data.shape, "First E_step is not all labeled data"
         self.M_step()  # Builds the initial NBC thetas from labeled docs only
+        self.check_initial_M_step()
         self.only_labeled_data = False
         # update total number of documents being leveraged
         self.n_docs = len(self.labeled_count_data) + len(self.unlabeled_count_data)
@@ -352,11 +366,12 @@ class EM_SSL(object):
                                           axis=self.vocab_axis,
                                           arr=count_data)
 
-        preds = np.argmax(pred_probas, axis=1)
-        print('print preds:', preds[:10])
-        print('labels:', label_vals[:10])
+        self.preds = np.argmax(pred_probas, axis=1)
+        # print('print preds:', self.preds[:10])
+        # print('labels:', label_vals[:10])
         # TODO: update to final preds based on given conf thresh
-        correct_preds = preds == label_vals
+        assert self.preds.shape == label_vals.shape, "Predictions have shape != ground truth vals."
+        correct_preds = self.preds == label_vals
         #print(correct_preds[:10])
         print(np.sum(correct_preds))
         pct_correct = np.sum(correct_preds) / len(label_vals)

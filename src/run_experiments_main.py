@@ -24,10 +24,11 @@ _tokens_to_remove = stopwords.words('english')
 #_tokens_to_remove.append('e')
 
 # Set labeled training data size range for experiments
-n_labeled_train_samples_list = [int(200 * k) for k in range(1, 5)]
+n_labeled_train_samples_list = [20, 100]
 
 # Fix static preprocessed data
-processor = TextPreProcessor(n_unlabeled_train_samples=1000,
+# original article suggests 10k fixed unlabeled samples
+processor = TextPreProcessor(n_unlabeled_train_samples=10000,
                                     tokens_to_remove=_tokens_to_remove,
                                     remove_zero_vocab_docs=remove_zero_vocab_docs,
                                     english_vocab=english_vocab)
