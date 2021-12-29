@@ -83,7 +83,7 @@ class EM_SSL(object):
         self.theta_j: float = 0  # Naive Bayes class prob of class j
         # Hash maps of statistics
         self.theta_j_per_class = np.zeros(self.n_labels)  # vals = theta_j: float
-        self.theta_jt_per_class = np.zeros([self.n_labels, self.vocab_size])  # vals = theta_jt: np.ndarray
+        self.theta_j_vocab_per_class = np.zeros([self.n_labels, self.vocab_size])  # vals = theta_jt: np.ndarray
         self.n_docs_per_class = np.zeros(self.n_labels)   # vals = num docs: int
         self.total_word_count_per_class = np.zeros(self.n_labels)  # vals: total words: int
         self.labeled_word_counts_per_class = np.zeros([self.n_labels, self.vocab_size])
@@ -128,7 +128,7 @@ class EM_SSL(object):
             print('WARNING: Got theta_j near zero for class=%d' % self.curr_class_idx)
 
     def compute_word_counts_in_class(self):
-        """For given class j (implicit), compute each words' count.
+        """For given class j (implicit), compute each words' count; +fractional for unlabeled based on class probas.
 
         Params:
             class_count_data (np.ndarray): word count_data in fixed class if labeled, else all word count_data
@@ -161,21 +161,24 @@ class EM_SSL(object):
         self.total_word_count_per_class[self.curr_class_idx] = np.sum(self.word_counts_per_class[self.curr_class_idx])
 
     def compute_theta_vocab_j(self):
-        """For each word t and fixed class j, compute theta_tj values via Eq. 3.5:
+        """For each word t and fixed class j, compute word probas per class:
+            theta_tj values via Eq. 3.5:
             P(w_t | c_j; theta) = (1 + count_of_word_t_in_class_j) / (vocab_size + total_sum_words_class_j)
 
         Computes:
             theta_j_vocab: shape(words_counts_j) = (vocab_size, )
 
         Notes:
+            Min(P(w_t | c_j)) = 1 / (vocab_size + total_sum_words_class_j)
             If word_t has sparse count, then theta_jt -> 0
-            theta_jt_per_class.shape = (n_classes, vocab_size)
+            theta_j_vocab_per_class.shape = (n_classes, vocab_size)
         """
-        word_counts_j = self.word_counts_per_class[self.curr_class_idx]
-        total_word_count_j = self.total_word_count_per_class[self.curr_class_idx]
+        word_counts_j = self.word_counts_per_class[self.curr_class_idx]  # (vocab_size, 1)
+        total_word_count_j = self.total_word_count_per_class[self.curr_class_idx]  # int
         theta_j_vocab = (1 + word_counts_j) / (self.vocab_size + total_word_count_j)  # Eq 3.5
-        self.theta_jt_per_class[self.curr_class_idx] = theta_j_vocab  # float
+        self.theta_j_vocab_per_class[self.curr_class_idx] = theta_j_vocab  # (vocab_size, 1)
         # TODO: theta_jt near zero => log(theta_jt) -> nan, when computing log loss
+        # can split via log(1 + word_counts_j) - log(self.vocab_size + total_word_count_j)
 
     def compute_all_thetas(self):
         """For each class j, labeled docs, and words, compute the "mixture" theta:
@@ -195,54 +198,52 @@ class EM_SSL(object):
             self.compute_total_words_in_class()  # -> self.total_word_count_per_class
             self.compute_theta_vocab_j()
 
-    def compute_doc_proba_per_class(self, doc_word_counts: np.ndarray) -> np.ndarray:
-        """For fixed doc x_i, for each class j compute P(x = x_i | class = j; theta) via Eq 3.2.
+    @staticmethod
+    def compute_log_of_sums(log_factors: np.ndarray) -> np.ndarray:
+        """Compute log of sums via LogExpSum trick (cf. Murphy 2012 Section 3.5.3)."""
+        max_log = np.max(log_factors)
+        summand = np.exp(log_factors - max_log)
+        log_of_sums = np.log(np.sum(summand)) + max_log
+        return log_of_sums
 
-        Params:
-            doc_word_counts: representation of a single document, shape = (vocab_size,)
-
-        Example:
-
-        """
-        doc_probas_per_class = np.array([np.prod(self.theta_jt_per_class[j] ** doc_word_counts, axis=0)
-                                         for j in self.ordered_labels_list])
-
-        return doc_probas_per_class
-
-    def compute_unnormalized_class_probas_doc(self, doc_word_counts: np.ndarray) -> np.ndarray:
-        """For fixed doc x_i, for each class j compute unnorm_P(c = j | x = x_i; theta)
+    def compute_unnormalized_class_log_probas_doc(self, doc_word_counts: np.ndarray) -> np.ndarray:
+        """For fixed doc x_i, for each class j compute unnormalized log P(c = j | x = x_i; theta)
 
         Params:
             doc_word_counts: representation of a single document, shape = (vocab_size, )
 
-        Computes:
-            P(c = j | theta) * P(x_i | c = j; theta), shape = (n_labels, )
+        Returns:
+            u_log_probas (np.ndarray): shape = (n_labels, )
 
         Notes:
-            Returns unnormalized factor, i.e. numerator of Eq 3.7 in SSL
+            Returns unnormalized log probas, i.e. log(numerator) of Eq 3.7 in SSL
             Used directly, without normalizing, to compute loss: Eq 3.8 in SSL
         """
-        doc_probas_per_class = self.compute_doc_proba_per_class(doc_word_counts=doc_word_counts)
-        # u_class_probas_doc = np.prod([self.theta_j_per_class, doc_probas_per_class], axis=0)
-        u_class_probas_doc = np.multiply(self.theta_j_per_class, doc_probas_per_class)
-        return u_class_probas_doc
 
-    def compute_normalized_class_probas_doc(self, doc_word_counts: np.ndarray):
+        u_log_probas = np.log(self.theta_j_per_class) + \
+                       np.array([np.sum(doc_word_counts * np.log(self.theta_j_vocab_per_class[j]), axis=0)
+                                for j in self.ordered_labels_list])
+        return u_log_probas
+
+    def compute_normalized_class_probas_doc(self, doc_word_counts: np.ndarray) -> np.ndarray:
         """For fixed doc x_i and theta, and each j: compute P(c = j | x_i; theta) via Eq 3.7 in SSL.
 
+        Params:
+            doc_word_counts: representation of a single document, shape = (vocab_size, )
+
+        Returns:
+            class_probas_normalized: class membership probabilities for the given doc x_i.
+
         Notes:
+            Applies LogSumExp trick to compute normalization factor (i.e. denominator of Eq 3.7)
             Main 'inference' method, i.e. model predictions for class membership.
-            Used to compute class probas of unlabeled docs -> EM updates
+            Used to compute class probas of unlabeled docs during EM updates
         """
-        unnormalized_class_probas = self.compute_unnormalized_class_probas_doc(doc_word_counts=doc_word_counts)
-        denom = np.sum(unnormalized_class_probas)
-        # if np.isclose(denom, 0):
-            # print("Warning: divide by zero warning for unnormalized class probas")
-            # print("May be due to small train samples and word count sparsity")
-        #    normalized_class_probas = unnormalized_class_probas
-        # else:
-        normalized_class_probas = unnormalized_class_probas / denom
-        return normalized_class_probas
+        unnormalized_class_log_probas = self.compute_unnormalized_class_log_probas_doc(doc_word_counts=doc_word_counts)
+        log_of_sums = self.compute_log_of_sums(log_factors=unnormalized_class_log_probas)
+        class_log_probas_normalized = unnormalized_class_log_probas - log_of_sums  # log(a/b) = log(a) - log(b)
+        class_probas_normalized = np.exp(class_log_probas_normalized)
+        return class_probas_normalized
 
     def compute_class_probas_unlabeled_data(self):
         """For each unlabeled doc x_u and class j, compute P(c = j | x_u, theta).
@@ -250,7 +251,6 @@ class EM_SSL(object):
         Notes:
             shape(unlabeled_data_class_probas) = (n_unlabeled_docs, n_labels)
         """
-        # np.array([self.compute_normalized_class_probas_doc(u) for u in self.unlabeled_count_data])
         self.unlabeled_data_class_probas = np.apply_along_axis(func1d=self.compute_normalized_class_probas_doc,
                                                                axis=self.vocab_axis,
                                                                arr=self.unlabeled_count_data)
@@ -297,16 +297,16 @@ class EM_SSL(object):
             Hence, take direct products of theta elements
         """
         # Compute log(P(theta_jt)) = log(prod_{i, j} theta_ij) = sum_{i,_j} (log(theta_ij)))
-        theta_jt_log = np.log(self.theta_jt_per_class)  # shape = (n_classes, vocab_size)
-        log_proba_theta_jt = np.sum(np.sum(theta_jt_log, axis=0))  # float
+        theta_j_vocab_log = np.log(self.theta_j_vocab_per_class)  # shape = (n_classes, vocab_size)
+        log_proba_theta_j_vocab = np.sum(np.sum(theta_j_vocab_log, axis=0))  # float
 
         # Compute log(P(theta_j))
         log_proba_theta_j = np.sum(np.log(self.theta_j_per_class))  # float
 
-        return log_proba_theta_j + log_proba_theta_jt
+        return log_proba_theta_j + log_proba_theta_j_vocab
 
     def compute_labeled_loss(self) -> float:
-        """Compute loss attributed to labeled data.
+        """Compute loss attributed to labeled data: sum(log(probas)).
 
         sum_{x labeled} log (P(class(x) | theta).P(x | c = class(x), theta
         """
@@ -322,6 +322,11 @@ class EM_SSL(object):
         return loss
 
     def compute_unlabeled_loss(self) -> float:
+        """Compute loss attributed to unlabeled data: sum(log(sum(probas)).
+        
+        Notes:
+            Since computation requires a log of sums, can use log-sum-exp trick
+        """
         joint_factors = np.apply_along_axis(func1d=self.compute_unnormalized_class_probas_doc,
                                             axis=self.vocab_axis,
                                             arr=self.unlabeled_count_data)
@@ -341,7 +346,8 @@ class EM_SSL(object):
             for each class multinomial and one for the overall class probabilities
 
         """
-        total_loss = self.compute_prior_loss() + self.compute_labeled_loss() + self.compute_unlabeled_loss()
+        # total_loss = self.compute_prior_loss() + self.compute_labeled_loss() + self.compute_unlabeled_loss()
+        total_loss = self.compute_labeled_loss() + self.compute_unlabeled_loss()
         return -total_loss
 
     def fit(self):
