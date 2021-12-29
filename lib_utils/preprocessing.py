@@ -1,5 +1,12 @@
 """
-Preprocessing of train and test newsgroups data.
+Preprocessing of train and test 20 NewsGroups data.
+
+Notes
+-----
+From section 3.3 of Nigam et al 2006
+"For preprocessing, stopwords are removed and word counts of each document are scaled such that each document has
+constant length, with potentially fractional word counts."
+
 
 DataSet Documentation
 -------------
@@ -8,7 +15,7 @@ https://scikit-learn.org/stable/modules/generated/sklearn.datasets.fetch_20newsg
 Example of working with 20 Newsgroup data from:
 https://scikit-learn.org/0.19/datasets/twenty_newsgroups.html
 
-# TRAIN
+# TRAIN Example:
 newsgroups_train = fetch_20newsgroups(subset='train',
                                       remove=('headers', 'footers', 'quotes'),
                                       categories=categories)
@@ -16,7 +23,7 @@ vectors = vectorizer.fit_transform(newsgroups_train.data)
 clf = MultinomialNB(alpha=.01)
 clf.fit(vectors, newsgroups_train.target)
 
-# TEST
+# TEST Example:
 newsgroups_test = fetch_20newsgroups(subset='test',
                                      remove=('headers', 'footers', 'quotes'),
                                      categories=categories)
@@ -94,7 +101,7 @@ class TextPreProcessor:
                  label_names_key: str = 'target_names',
                  label_vals_key: str = 'target',
                  remove_zero_vocab_docs: bool = True,
-                 n_labeled_train_samples=20,
+                 n_labeled_train_samples=40,
                  n_unlabeled_train_samples=1000,
                  remove_fields=('headers', 'footers', 'quotes')):
         self.tokens_to_remove = tokens_to_remove
@@ -310,6 +317,7 @@ class TextPreProcessor:
             static_doc_len = self.max_doc_len
         else:
             raise Exception('Static doc len strategy %s not implemented' % strategy)
-        reshaped_sums = np.sum(word_count_data, axis=vocab_axis).reshape(len(word_count_data), 1)
+        # add + 1 to reshaped in case vocab => word_count_data sum = 0
+        reshaped_sums = 1 + np.sum(word_count_data, axis=vocab_axis).reshape(len(word_count_data), 1)
         scaled_word_count_data = (static_doc_len / reshaped_sums) * word_count_data
         return scaled_word_count_data
