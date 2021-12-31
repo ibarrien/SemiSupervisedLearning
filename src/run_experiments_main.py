@@ -24,7 +24,7 @@ _tokens_to_remove = stopwords.words('english')
 #_tokens_to_remove.append('e')
 
 # Set labeled training data size range for experiments
-n_labeled_train_samples_list = [20, 100]
+n_labeled_train_samples_list = [200, 500]
 
 # Fix static preprocessed data
 # original article suggests 10k fixed unlabeled samples
@@ -63,6 +63,8 @@ for n_labeled_train_samples in n_labeled_train_samples_list:
     model = EM_SSL(labeled_count_data=scaled_labeled_train_sample_data,
                    label_vals=processor.train_sample_label_vals,
                    unlabeled_count_data=scaled_unlabeled_data,
+                   test_count_data=scaled_test_data,
+                   test_label_val_vals=processor.full_test_label_vals,
                    max_em_iters=10,
                    min_em_loss_delta=2e-4)
 
@@ -70,6 +72,6 @@ for n_labeled_train_samples in n_labeled_train_samples_list:
 
     # out-of-sammple inference: test
     pct_test_correct_preds = model.evaluate_on_data(count_data=scaled_test_data,
-                                                label_vals=processor.full_test_label_vals)
+                                                    label_vals=processor.full_test_label_vals)
     print(pct_test_correct_preds)
 
