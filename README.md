@@ -6,4 +6,5 @@
 
 ## Running an experiment:
 $ python setup.py install
+
 $ python src/run_experiments.py
