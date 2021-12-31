@@ -46,6 +46,8 @@ class EM_SSL(object):
     """
     def __init__(self, labeled_count_data: np.ndarray, label_vals: np.ndarray,
                  unlabeled_count_data: np.ndarray,
+                 test_count_data: np.ndarray = None,
+                 test_label_vals: np.ndarray = None,
                  doc_axis: int = 0, vocab_axis: int = 1,
                  max_em_iters=20, min_em_loss_delta=1e-2):
 
@@ -89,7 +91,9 @@ class EM_SSL(object):
         self.labeled_word_counts_per_class = np.zeros([self.n_labels, self.vocab_size])
         self.word_counts_per_class = np.zeros([self.n_labels, self.vocab_size])  # vals = word_counts: np.ndarray
         self.unlabeled_this_class_probas = np.zeros(self.n_unlabeled_docs)  # for single j, each x_u: P(c=j | x_u)
-        self.unlabeled_data_class_probas = np.array([self.n_unlabeled_docs, self.n_labels])  # [P(c=j | x_u)]
+        self.unlabeled_data_class_probas = np.zeros([self.n_unlabeled_docs, self.n_labels])  # [P(c=j | x_u)]
+        self.test_count_data = test_count_data
+        self.test_label_vals = test_label_vals
 
     def set_in_class_mask(self):
         """Data mask of class label."""
@@ -273,7 +277,7 @@ class EM_SSL(object):
     def check_initial_M_step(self):
         total_class_counts = np.sum(self.n_labeled_docs_per_class, axis=0)
         n_labeled_train = self.labeled_count_data.shape[0]
-        print("Checking initail M step on only labeled train data...")
+        print("Checking initial M step on only labeled train data...")
         assert total_class_counts == n_labeled_train, "Total class count = %d != %d labeled train samples" % \
             (total_class_counts, n_labeled_train)
         print("Congrats, initial M step assertions passed.")
@@ -310,29 +314,28 @@ class EM_SSL(object):
 
         sum_{x labeled} log (P(class(x) | theta).P(x | c = class(x), theta
         """
-        joint_probas = np.apply_along_axis(func1d=self.compute_unnormalized_class_probas_doc,
-                                           axis=self.vocab_axis,
-                                           arr=self.labeled_count_data)
-        # joint_factors shape = (n_train_count, n_labels): unnormalized "joint"
-        joint_factors_labeled_data = np.array([joint_probas[k][self.label_vals[k]]
-                                               for k in range(len(joint_probas))])
+        joint_log_factors = np.apply_along_axis(func1d=self.compute_unnormalized_class_log_probas_doc,
+                                                axis=self.vocab_axis,
+                                                arr=self.labeled_count_data)
+        # joint_log_factors shape = (n_train_count, n_labels): unnormalized "joint"
+        joint_log_factors_labeled_data = np.array([joint_log_factors[k][self.label_vals[k]]
+                                                   for k in range(len(joint_log_factors))])
 
-        loss = np.sum(np.log(joint_factors_labeled_data))  # sum across all labeled docs
+        loss = np.sum(joint_log_factors_labeled_data)  # sum across all labeled docs
 
         return loss
 
     def compute_unlabeled_loss(self) -> float:
-        """Compute loss attributed to unlabeled data: sum(log(sum(probas)).
-        
-        Notes:
-            Since computation requires a log of sums, can use log-sum-exp trick
-        """
-        joint_factors = np.apply_along_axis(func1d=self.compute_unnormalized_class_probas_doc,
-                                            axis=self.vocab_axis,
-                                            arr=self.unlabeled_count_data)
-        # joint_factors_per_class shape = (n_train_count, n_labels)
-        joint_factors_across_classes = np.sum(joint_factors, axis=1)
-        loss = np.sum(np.log(joint_factors_across_classes))  # sum across all unlabeled docs
+        """Compute loss attributed to unlabeled data: sum(log(sum(probas)). """
+        joint_log_factors = np.apply_along_axis(func1d=self.compute_unnormalized_class_log_probas_doc,
+                                                axis=self.vocab_axis,
+                                                arr=self.unlabeled_count_data)
+        # joint_factors: (n_unlabeled_docs, n_labels)
+        log_of_sums = np.apply_along_axis(func1d=self.compute_log_of_sums,
+                                          axis=1,  # for each doc, sum across classes
+                                          arr=joint_log_factors)
+        # log_of_sums: (n_unlabeled_docs, )
+        loss = np.sum(log_of_sums)  # sum across all unlabeled docs
         return loss
 
     def compute_total_loss(self) -> float:
@@ -346,9 +349,30 @@ class EM_SSL(object):
             for each class multinomial and one for the overall class probabilities
 
         """
-        # total_loss = self.compute_prior_loss() + self.compute_labeled_loss() + self.compute_unlabeled_loss()
-        total_loss = self.compute_labeled_loss() + self.compute_unlabeled_loss()
+        total_loss = self.compute_prior_loss() + self.compute_labeled_loss() + self.compute_unlabeled_loss()
+        # total_loss = self.compute_labeled_loss() + self.compute_unlabeled_loss()
         return -total_loss
+
+    def evaluate_on_data(self, count_data: np.array, label_vals: np.array) -> float:
+        """Evaluate current model on a given set of documents.
+
+        Params:
+            count_data: array of documents, each doc represented by a word count vector
+            label_vals: labels for count data
+
+        Returns:
+            Current model predictive (on the nose) accuracy
+        """
+        pred_probas = np.apply_along_axis(func1d=self.compute_normalized_class_probas_doc,
+                                          axis=self.vocab_axis,
+                                          arr=count_data)
+
+        self.preds = np.argmax(pred_probas, axis=1)
+        assert self.preds.shape == label_vals.shape, "Predictions have shape != ground truth vals."
+        correct_preds = self.preds == label_vals
+        n_correct = np.sum(correct_preds)
+        pct_correct = n_correct / len(label_vals)
+        return pct_correct
 
     def fit(self):
         """Run expectation maximization until delta convergence or max iters."""
@@ -360,6 +384,10 @@ class EM_SSL(object):
             print('curr loss: %0.2f' % curr_loss)
             self.E_step()
             self.M_step()
+            if self.test_count_data is not None and self.test_label_vals is not None:
+                curr_test_acc = self.evaluate_on_data(count_data=self.test_count_data,
+                                                      label_vals=self.test_label_vals)
+                print('curr out-of-sample test acc: %0.2f%%' % (100 * curr_test_acc))
             delta_improvement = prev_loss - curr_loss  # expect 0 <= curr_loss <= prev_loss
             if delta_improvement < self.min_em_loss_delta:
                 print('Early stopping EM: delta improvement = %0.4f < min_delta = %0.4f'
@@ -367,21 +395,6 @@ class EM_SSL(object):
                 break
 
 
-    def evaluate_on_data(self, count_data: np.array, label_vals: np.array) -> float:
-        pred_probas = np.apply_along_axis(func1d=self.compute_normalized_class_probas_doc,
-                                          axis=self.vocab_axis,
-                                          arr=count_data)
-
-        self.preds = np.argmax(pred_probas, axis=1)
-        # print('print preds:', self.preds[:10])
-        # print('labels:', label_vals[:10])
-        # TODO: update to final preds based on given conf thresh
-        assert self.preds.shape == label_vals.shape, "Predictions have shape != ground truth vals."
-        correct_preds = self.preds == label_vals
-        #print(correct_preds[:10])
-        print(np.sum(correct_preds))
-        pct_correct = np.sum(correct_preds) / len(label_vals)
-        return pct_correct
 
 
 
