@@ -39,7 +39,7 @@ em = EM_SSL(labeled_count_data=labeled_count_data,
             max_em_iters=10,
             min_em_loss_delta=2e-4)
 
-em.run_EM_loop()
+em.fit()
 
 # ASSERTION TESTS (todo: write a seperate unit_test.py)
 assert em.word_counts_per_class.shape == (em.n_labels, em.vocab_size), "word counts per class has wrong shape"
