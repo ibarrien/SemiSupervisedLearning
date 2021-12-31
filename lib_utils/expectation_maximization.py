@@ -387,7 +387,7 @@ class EM_SSL(object):
             if self.test_count_data is not None and self.test_label_vals is not None:
                 curr_test_acc = self.evaluate_on_data(count_data=self.test_count_data,
                                                       label_vals=self.test_label_vals)
-                print('curr out-of-sample test acc: %0.2f%%' % (100 * curr_test_acc))
+                print('curr out-of-sample itest acc: %0.2f%%' % (100 * curr_test_acc))
             delta_improvement = prev_loss - curr_loss  # expect 0 <= curr_loss <= prev_loss
             if delta_improvement < self.min_em_loss_delta:
                 print('Early stopping EM: delta improvement = %0.4f < min_delta = %0.4f'
