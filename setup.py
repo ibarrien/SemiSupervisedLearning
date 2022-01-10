@@ -23,6 +23,7 @@ setuptools.setup(name="Semi Supervised Learning, NLP prototype",
 		"src",
 		"lib_utils",
 	],
+	python_requires='>=3.6',
 	install_requires=[
 		"wheel",
 		"nptyping==1.4.4",

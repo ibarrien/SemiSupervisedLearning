@@ -14,7 +14,10 @@ from nltk.corpus import words as nltk_english_words
 
 from lib_utils.preprocessing import TextPreProcessor
 from lib_utils.expectation_maximization import EM_SSL
+from lib_utils import nltkconfig
 
+defaultNLK_datafolder = nltkconfig.kDefaultNLK_datafolder   #TODO: control from command line using argparse
+nlk_datafolder = nltkconfig.NLTK_datapath(defaultNLK_datafolder, override=True)
 
 # Set tokens to remove for all text preprocessing
 remove_zero_vocab_docs = True
