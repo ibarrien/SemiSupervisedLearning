@@ -25,6 +25,9 @@ _tokens_to_remove.append('e')
 porter_stemmer = PorterStemmer()
 
 
+
+
+
 def remove_stop_words(text, tokens_to_remove):
     """Remove common stop words from sentence"""
     new_text = ' '.join([x for x in text.split() if x not in tokens_to_remove])
