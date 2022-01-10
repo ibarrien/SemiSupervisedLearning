@@ -67,7 +67,7 @@ for n_labeled_train_samples in n_labeled_train_samples_list:
                    label_vals=processor.train_sample_label_vals,
                    unlabeled_count_data=scaled_unlabeled_data,
                    test_count_data=scaled_test_data,
-                   test_label_val_vals=processor.full_test_label_vals,
+                   test_label_vals=processor.full_test_label_vals,
                    max_em_iters=10,
                    min_em_loss_delta=2e-4)
 
