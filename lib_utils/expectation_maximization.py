@@ -181,8 +181,6 @@ class EM_SSL(object):
         total_word_count_j = self.total_word_count_per_class[self.curr_class_idx]  # int
         theta_j_vocab = (1 + word_counts_j) / (self.vocab_size + total_word_count_j)  # Eq 3.5
         self.theta_j_vocab_per_class[self.curr_class_idx] = theta_j_vocab  # (vocab_size, 1)
-        # TODO: theta_jt near zero => log(theta_jt) -> nan, when computing log loss
-        # can split via log(1 + word_counts_j) - log(self.vocab_size + total_word_count_j):
 
     def compute_all_thetas(self):
         """For each class j, labeled docs, and words, compute the "mixture" theta:
@@ -381,13 +379,13 @@ class EM_SSL(object):
         for _ in range(self.max_em_iters):
             prev_loss = curr_loss
             curr_loss = self.compute_total_loss()
-            print('curr loss: %0.2f' % curr_loss)
+            print('curr train loss: %0.2f' % curr_loss)
             self.E_step()
             self.M_step()
             if self.test_count_data is not None and self.test_label_vals is not None:
                 curr_test_acc = self.evaluate_on_data(count_data=self.test_count_data,
                                                       label_vals=self.test_label_vals)
-                print('curr out-of-sample itest acc: %0.2f%%' % (100 * curr_test_acc))
+                print('curr out-of-sample test acc: %0.2f%%' % (100 * curr_test_acc))
             delta_improvement = prev_loss - curr_loss  # expect 0 <= curr_loss <= prev_loss
             if delta_improvement < self.min_em_loss_delta:
                 print('Early stopping EM: delta improvement = %0.4f < min_delta = %0.4f'
