@@ -11,10 +11,10 @@ $ python src/em_driver.py
 """
 
 
-from distutils.core import setup
+import setuptools
 
 
-setup(name="Semi Supervised Learning, NLP prototype",
+setuptools.setup(name="Semi Supervised Learning, NLP prototype",
 	version="1.02",
 	description="Proof of concept SSL + EM",
 	author="Ivan Barrientos",
@@ -24,7 +24,10 @@ setup(name="Semi Supervised Learning, NLP prototype",
 		"lib_utils",
 	],
 	install_requires=[
+		"wheel",
 		"nptyping==1.4.4",
 		"numpy==1.20.2",
+		"nltk",
+		"sklearn",
 	],
 )
