@@ -15,5 +15,6 @@ $ pip install ./SemiSupervisedLearning
 
 # https://www.nltk.org/data.html
 
-$ python src/download_nltk_data.py
+$ python src/download_nltk_data.py --data <your nltk_data folder>
+# or modify nltkconfig.kDefaultNLK_datafolder to change global default (recommended)	
 $ python src/run_experiments.py

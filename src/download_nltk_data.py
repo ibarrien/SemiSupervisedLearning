@@ -10,6 +10,7 @@ For each loop:
 @author: mannykao
 """
 #from pathlib import Path
+import argparse
 import nltk
 
 from nltk.corpus import stopwords
@@ -19,19 +20,31 @@ from lib_utils import nltkconfig
 #
 # https://www.nltk.org/data.html
 #
+nltk_data_list = [
+	"corpora",
+	"words",
+]
 
 if __name__ == '__main__':
-	defaultNLK_datafolder = nltkconfig.kDefaultNLK_datafolder	#TODO: control from command line using argparse
+	defaultNLTK_datafolder = nltkconfig.kDefaultNLK_datafolder
+	#print(f"NLTK_data folder: {defaultNLTK_datafolder}")
 
-	#1: see if the NLYK 'corpora' was downloaded
-	downloaded = nltkconfig.check_nltk_data("corpora")
+	parser = argparse.ArgumentParser(description='NLTK data downloader')
+	parser.add_argument('--data', type = str, default = defaultNLTK_datafolder, metavar=defaultNLTK_datafolder, help = "default folder for NLTK data")
+	args = parser.parse_args()
+	defaultNLTK_datafolder = args.data
+
+	#1: see if the NLTK 'corpora' was downloaded
+	downloaded = True
+	for data in nltk_data_list:
+		downloaded &= nltkconfig.check_nltk_data(data)
 
 	if not downloaded:
 		#2: invoke download dialog and setting the download folder to where we want it
-		nltk.download(download_dir=defaultNLK_datafolder)
+		nltk.download(download_dir=defaultNLTK_datafolder)
 
 	#3 overide nltk.data.path to our folder, you also can use append 
-	nlk_datafolder = nltkconfig.NLTK_datapath(defaultNLK_datafolder, override=True)
+	nlk_datafolder = nltkconfig.NLTK_datapath(defaultNLTK_datafolder, override=True)
 	try:
 		downloaded = nltk.download("words")
 	except:
