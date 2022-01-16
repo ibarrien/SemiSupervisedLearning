@@ -45,11 +45,6 @@ if __name__ == '__main__':
 
 	#3 overide nltk.data.path to our folder, you also can use append 
 	nlk_datafolder = nltkconfig.NLTK_datapath(defaultNLTK_datafolder, override=True)
-	try:
-		downloaded = nltk.download("words")
-	except:
-		print(f"Failed to download {nltk.corpus.words}, run nltk.download().")
-		# NLTK Data download dialog
 
 	# Set tokens to remove for all text preprocessing
 	remove_zero_vocab_docs = True
