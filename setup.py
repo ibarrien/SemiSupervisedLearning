@@ -9,10 +9,11 @@ $ python src/em_driver.py
 
 @author: ibarrien, mannykao
 """
-
-
 import setuptools
 
+#
+# this is not yet needed since we are not a package. See README.md.
+#
 
 setuptools.setup(name="Semi Supervised Learning, NLP prototype",
 	version="1.02",
