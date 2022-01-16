@@ -1,23 +1,24 @@
 """
 Central location for the nltk_data
 
-Dynamic: labeled train dataset for EM
-For each loop:
-- increase labeled train dataset size
-- evaluate on test set
-
 @author: mannykao
 """
 import os, sys
-from pathlib import Path
+#import re
+from pathlib import Path, PurePosixPath
+
 import nltk
 
+from . import projconfig
 
 #central location for nltk_data
-kDefaultNLK_datafolder="d:/Dev/datasets/nltk_data"	#TODO: temporaray hack to get everthing running. Do a proper projconfig.
+kDefaultNLK_datafolder="d:/dev/ml/nce/ssl/datasets/nltk_data"
 
-def direxist(dirname):
-	return os.path.isdir(dirname) and os.path.exists(dirname)
+
+def getDataFolder() -> Path:
+	""" return '{kDevRoot}/datasets/nltk_data' """
+	root = projconfig.getDataFolder()
+	return root / 'nltk_data' 	#ssl/datasets/nltk_data
 
 def set_default_datafolder(folder:str):
 	kDefaultNLK_datafolder = folder
@@ -43,6 +44,11 @@ def NLTK_datapath(mydatafolder:str=kDefaultNLK_datafolder, override=False):
 
 
 if __name__ == '__main__':
+	reporoot = projconfig.getRepoRoot()
+	print(f"{reporoot=}")
+	datafolder = getDataFolder()
+	print(f"{datafolder=}")
+
 	print(f"{check_nltk_data('corpora')=}")
 	print(f"{check_nltk_data('corpora/words')=}")
 

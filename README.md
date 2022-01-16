@@ -9,10 +9,12 @@
 # python -m venv venv4ssl
 # Windows/Anaconda: venv4ssl/Script/activate
 # macos/Linux: source venv4ssl/bin/activate
+# python -m pip install --upgrade pip
 
-# install our package
-$ pip install ./SemiSupervisedLearning
+# install our requirements:
+$ pip install -r requirements.txt
 
+# get nlkt_data:
 # https://www.nltk.org/data.html
 
 $ python src/download_nltk_data.py --data <your nltk_data folder>

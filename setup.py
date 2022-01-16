@@ -7,7 +7,7 @@ After setup install, text preprocessing, can do:
 
 $ python src/em_driver.py
 
-@author: ibarrien
+@author: ibarrien, mannykao
 """
 
 
