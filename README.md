@@ -7,6 +7,18 @@
 ## Running experiments:
 python setup.py install
 
+### nltk requirements
+nltk >= 3.6
+
+and
+
+```nltk.corpus.stopwords```
+which can be downloaded via
+
+```import nltk```
+
+```nltk.download('stopwords')```
+
 ### Run experiments when using number of labeled samples: 100,300,500,700,1000
 python src/run_experiments_main.py --n_
 labeled 100,300,500,700,1000 --n_unlabeled 10000 --max_iters 10 --out_dir <your_dir>  --test_acc_plot
