@@ -20,7 +20,6 @@ setuptools.setup(name="Semi Supervised Learning, NLP prototype",
 	author="Ivan Barrientos",
 	author_email="corps.des.nombres@gmail.com",
 	packages=[
-		"src",
 		"lib_utils",
 	],
 	install_requires=[
