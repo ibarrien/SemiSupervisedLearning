@@ -15,9 +15,9 @@ and
 ```nltk.corpus.stopwords```
 which can be downloaded via
 
-```import nltk```
+```python -m nltk.downloader stopwords```
 
-```nltk.download('stopwords')```
+Reference: [installing nltk data](https://www.nltk.org/data.html#installing-nltk-data)
 
 ### Run experiments when using number of labeled samples: 100,300,500,700,1000
 python src/run_experiments_main.py --n_
