@@ -71,11 +71,11 @@ def _process_text(document_as_single_str: str, tokens_to_remove: List[str] = Non
     filtered = re.sub('[^a-zA-Z]', ' ', filtered)
     filtered = re.sub(r'\[[0-9]*\]', ' ', filtered)
     filtered = re.sub(r'\s+', ' ', filtered)  # white space chars
-    if stemmer:
+    if stemmer is not None:
         filtered = _stem(filtered, stemmer=stemmer)
-    if tokens_to_remove:
+    if tokens_to_remove is not None:
         filtered = remove_stop_words(filtered, tokens_to_remove=tokens_to_remove)
-    if english_vocab:
+    if english_vocab is not None:
         filtered = is_english(filtered, english_vocab=english_vocab)
     return filtered
 

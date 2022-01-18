@@ -20,8 +20,7 @@ Each "Eq" referes to an equation in [Nigam] Section 3.2.
 
 """
 
-import pathlib
-import pickle
+from typing import Dict
 import numpy as np
 
 
@@ -83,6 +82,7 @@ class EM_SSL(object):
         self.class_mask = np.array([])
         self.this_class_count_data = np.array([])
         self.theta_j: float = 0  # Naive Bayes class prob of class j
+        self.preds = np.array([])  # prediction array for evaluation, e.g. on out-of-sample data
         # Hash maps of statistics
         self.theta_j_per_class = np.zeros(self.n_labels)  # vals = theta_j: float
         self.theta_j_vocab_per_class = np.zeros([self.n_labels, self.vocab_size])  # vals = theta_jt: np.ndarray
@@ -92,6 +92,8 @@ class EM_SSL(object):
         self.word_counts_per_class = np.zeros([self.n_labels, self.vocab_size])  # vals = word_counts: np.ndarray
         self.unlabeled_this_class_probas = np.zeros(self.n_unlabeled_docs)  # for single j, each x_u: P(c=j | x_u)
         self.unlabeled_data_class_probas = np.zeros([self.n_unlabeled_docs, self.n_labels])  # [P(c=j | x_u)]
+        self.test_accuracy_hist = dict()  # out-of-sample test hist, including model without unlabeled data
+        self.total_em_iters = 0  # number of EM iters including unlabeled data
         self.test_count_data = test_count_data
         self.test_label_vals = test_label_vals
 
@@ -283,7 +285,7 @@ class EM_SSL(object):
     def initialize_EM(self):
         """Initial computations prior to expecation-maximization loop."""
         self.only_labeled_data = True
-        assert self.count_data.shape == self.labeled_count_data.shape, "First E_step is not all labeled data"
+        assert self.count_data.shape == self.labeled_count_data.shape, "First M_step is not on all labeled data"
         self.M_step()  # Builds the initial NBC thetas from labeled docs only
         self.check_initial_M_step()
         self.only_labeled_data = False
@@ -375,23 +377,45 @@ class EM_SSL(object):
     def fit(self):
         """Run expectation maximization until delta convergence or max iters."""
         self.initialize_EM()
+        # get test accuracy without using unlabeled data in training
+        if self.test_count_data is not None and self.test_label_vals is not None:
+            curr_test_acc = self.evaluate_on_data(count_data=self.test_count_data,
+                                                  label_vals=self.test_label_vals)
+            print('curr out-of-sample test acc using only labeled data: %0.2f%%' % (100 * curr_test_acc))
+            self.test_accuracy_hist[0] = curr_test_acc
+        # start EM loop using unlabeled data as part of training
         curr_loss = np.inf
-        for _ in range(self.max_em_iters):
+        for em_iter in range(self.max_em_iters):
             prev_loss = curr_loss
             curr_loss = self.compute_total_loss()
             print('curr train loss: %0.2f' % curr_loss)
             self.E_step()
             self.M_step()
+            self.total_em_iters += 1
             if self.test_count_data is not None and self.test_label_vals is not None:
                 curr_test_acc = self.evaluate_on_data(count_data=self.test_count_data,
                                                       label_vals=self.test_label_vals)
                 print('curr out-of-sample test acc: %0.2f%%' % (100 * curr_test_acc))
+                self.test_accuracy_hist[em_iter + 1] = curr_test_acc  # key 0 is for using only labeled data
             delta_improvement = prev_loss - curr_loss  # expect 0 <= curr_loss <= prev_loss
             if delta_improvement < self.min_em_loss_delta:
                 print('Early stopping EM: delta improvement = %0.4f < min_delta = %0.4f'
                       % (delta_improvement, self.min_em_loss_delta))
                 break
 
+    def get_test_acc_hist(self) -> Dict[int, float]:
+        """Get out-of-sample test accuracy history over EM iterations."""
+        return self.test_accuracy_hist
+
+    def only_labeled_test_acc(self) -> float:
+        """Test accuracy using only labeled data."""
+        return self.test_accuracy_hist[0]
+
+    def last_em_iter_test_acc(self) -> float:
+        """Test accuracy on last complete EM iteration that included unlabeled data."""
+        assert self.total_em_iters > 0, "Did not train using unlabeled data."
+
+        return self.test_accuracy_hist[self.total_em_iters]
 
 
 
