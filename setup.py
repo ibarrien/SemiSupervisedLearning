@@ -3,10 +3,6 @@ Basic setup of packages.
 
 $ python setup.py install
 
-After setup install, text preprocessing, can do:
-
-$ python src/em_driver.py
-
 @author: ibarrien
 """
 
