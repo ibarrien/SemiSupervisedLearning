@@ -32,4 +32,5 @@ $ python src/run_experiments_main.py
 --out_dir <your_dir> 
 --test_acc_plot_fname test_acc.png
 ```
+<img src="https://user-images.githubusercontent.com/7552335/150062562-64e3c1fe-3f08-4dac-80c5-b9eb13e5c4fc.png" width="350" height="300" />
 
