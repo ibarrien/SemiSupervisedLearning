@@ -22,7 +22,7 @@ setuptools.setup(name="Semi Supervised Learning, NLP prototype",
 	author_email="corps.des.nombres@gmail.com",
 	packages=[
 		"src",
-		"lib_utils",
+		"lib_utils_ivan",
 	],
 	python_requires='>=3.6',
 	install_requires=[
@@ -32,4 +32,4 @@ setuptools.setup(name="Semi Supervised Learning, NLP prototype",
 		"nltk",
 		"sklearn",
 	],
-)
+):
