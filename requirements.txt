@@ -1,6 +1,0 @@
-wheel
-nptyping==1.4.4
-numpy==1.20.2
-nltk
-sklearn
-
