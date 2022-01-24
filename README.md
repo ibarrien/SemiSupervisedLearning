@@ -1,5 +1,8 @@
 # Semi Supervised Learning
-Example of applying expectation maximization to loss function := labeled_loss + unlabeled_loss
+Demonstrate how adding unlabeled data to a supervised problem can improve out-of-sample accuracy.
+
+This repo provides an example of this accuracy improvement through 
+a loss function := labeled_loss + unlabeled_loss which is optimized using expectation-maximization (EM).
 
 
 Follows Nigam et al 2006 from "Semi-Supervised Learning", Chapelle et al.
