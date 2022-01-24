@@ -27,6 +27,3 @@ def plot_test_acc(test_acc_results: Dict[int, Dict[str, float]],
     plt.savefig(plot_save_path)
 
     return None
-
-
-#plot_test_acc(test_acc_results=X, n_unlabeled=10000, plot_save_path=f)

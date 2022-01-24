@@ -6,7 +6,7 @@ from lib_utils import nltkconfig
 
 if __name__ == '__main__':
 	reporoot = projconfig.getRepoRoot()
-	print(f"{reporoot=}")
+	print(f"reporoot={reporoot}")
 	datafolder = projconfig.getDataFolder()
-	print(f"{datafolder=}")
+	print(f"datafolder={datafolder}")
 	print(nltkconfig.getDataFolder())

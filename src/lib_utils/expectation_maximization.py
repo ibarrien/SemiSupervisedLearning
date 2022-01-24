@@ -417,6 +417,3 @@ class EM_SSL(object):
 
         return self.test_accuracy_hist[self.total_em_iters]
 
-
-
-

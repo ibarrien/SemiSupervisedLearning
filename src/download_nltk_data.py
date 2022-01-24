@@ -49,7 +49,7 @@ if __name__ == '__main__':
 	# Set tokens to remove for all text preprocessing
 	remove_zero_vocab_docs = True
 	english_vocab = set(nltk_english_words.words())
-	print(f"{len(english_vocab)=}")
+	print(f"english vocab len={len(english_vocab)}")
 	english_vocab = None
 	_tokens_to_remove = stopwords.words('english')
-	print(f"{len(_tokens_to_remove)=}")
+	print(f"len tokens to remove={len(_tokens_to_remove)}")

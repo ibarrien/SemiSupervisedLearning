@@ -64,7 +64,7 @@ def is_english(text: str, english_vocab: List[str]) -> str:
 
 
 def _process_text(document_as_single_str: str, tokens_to_remove: List[str] = None,
-                 english_vocab: List[str] = None, stemmer=None) -> str:
+                  english_vocab: List[str] = None, stemmer=None) -> str:
     """Basic text processing on a single string."""
     # filtered.translate(str.maketrans('', '', string.punctuation))
     filtered = document_as_single_str.lower()
