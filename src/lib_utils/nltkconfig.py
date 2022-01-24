@@ -3,7 +3,7 @@ Central location for the nltk_data.
 
 Examples
 #central location for nltk_data
-kDefaultNLK_datafolder="d:/dev/ml/nce/ssl/datasets/nltk_data"
+kDefaultNLK_datafolder="{repoRoot}/datasets/nltk_data"
 
 
 @author: mannykao
@@ -16,6 +16,8 @@ from pathlib import Path, PurePosixPath
 import nltk
 from . import projconfig
 
+
+kDefaultNLK_datafolder=f"{projconfig.getRepoRoot()}/datasets/nltk_data"
 
 
 def getDataFolder() -> Path:

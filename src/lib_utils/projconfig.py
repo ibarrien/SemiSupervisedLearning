@@ -9,8 +9,8 @@ from pathlib import Path, PurePosixPath
 
 
 #central location for nltk_data
-kDevRoot = "ssl"
-kDefaultNLK_datafolder = "d:/dev/ml/nce/ssl/datasets/nltk_data"
+kDevRoot = "ssl" 	#the same of our top level repo
+#kDefaultNLK_datafolder = "d:/dev/ml/nce/ssl/datasets/nltk_data"
 
 def direxist(dirname):
 	return os.path.isdir(dirname) and os.path.exists(dirname)

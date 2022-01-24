@@ -48,7 +48,7 @@ if __name__ == '__main__':
     parser.add_argument('--nltk_data_dir', type=str, dest='nltk_data_dir',
                         help='path to nltk data, including corpora/stopwords.\
                         If corpora/stopwords does not exist, download here.',
-                        default='')
+                        default=nltkconfig.getDataFolder())
     parser.add_argument('--test_acc_plot_fname', type=str, dest='test_acc_plot_fname',
                         help='filename of test accuracy plot',
                         default='acc_plot.png')
