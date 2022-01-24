@@ -1,24 +1,30 @@
 # Semi Supervised Learning
+Example of applying expectation maximization to loss function := labeled_loss + unlabeled_loss
 
-### Example of applying expectation maximization to loss function := labeled_loss + unlabeled_loss
 
-### Follows Nigam et al 2006 from "Semi-Supervised Learning", Chapelle et al.
+Follows Nigam et al 2006 from "Semi-Supervised Learning", Chapelle et al.
 
-## Running an experiment:
+## Running experiments
+### Create virtual env
+```python -m venv venv4ssl```
 
-# python -m venv venv4ssl
-# Windows/Anaconda: venv4ssl/Script/activate
-# macos/Linux: source venv4ssl/bin/activate
-# python -m pip install --upgrade pip
+### Activate virtual env
+Windows/Anaconda: venv4ssl/Script/activate
 
-# install our requirements:
-$ pip install -r requirements.txt
+macos/Linux: source venv4ssl/bin/activate
 
-## nltk_data note:
+### Install requirements
+
+```bash
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+#### nltk_data note:
 Handled by specifying nltk data dir in run_experiments_main
 
-# run experiments with varying num of labeled samples:
-```
+### run experiments with varying num of labeled samples:
+```bash
 python src/run_experiments_main.py 
 --n_labeled 100,300,500,700,1000 
 --n_unlabeled 10000 
