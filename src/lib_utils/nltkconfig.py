@@ -52,7 +52,12 @@ def set_nltk_datapath(mydatafolder: str, override=False) -> None:
 
 def stopwords_exists(parent_name: str = "corpora") -> bool:
 	"""Check if stopwords in nltk data dir."""
-	exists = "stopwords" in os.listdir(nltk.data.find(parent_name))
+	exists = False
+	candidate_list = os.listdir(nltk.data.find(parent_name))
+	if candidate_list is None or type(candidate_list) != list or len(candidate_list) == 0:
+		return False
+	else:
+		exists = "stopwords" in os.listdir(nltk.data.find(parent_name))
 	return exists
 
 
