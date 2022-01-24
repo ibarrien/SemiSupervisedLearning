@@ -11,8 +11,14 @@ Follows Nigam et al 2006 from "Semi-Supervised Learning", Chapelle et al.
 ### Activate virtual env
 Windows/Anaconda: venv4ssl/Script/activate
 
+Powershell notes:
+
+1. you may need to Powershell as administrator
+2. \venv4ssl\Scripts\Activate.ps1
+
 macos/Linux: source venv4ssl/bin/activate
 
+Linux notes: installing matplotlib may require headers like ft2build.h
 ### Install requirements
 
 ```bash
