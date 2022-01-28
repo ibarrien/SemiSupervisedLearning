@@ -1,6 +1,4 @@
-wheel
 nptyping==1.4.4
 numpy==1.20.2
-nltk
-sklearn
-
+sklearn==0.23.2
+nltk==3.6.6
