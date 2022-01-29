@@ -98,13 +98,9 @@ def sample_partitions_indices(x: np.ndarray,
         sampled_indices = np.random.choice(a=part_indices,
                                            size=n_samples_per_part,
                                            replace=sample_with_replacement)
-        print("for part %d, sampled indices %s"
-              % (part, sampled_indices))
-        #result = np.concatenate([result, sampled_indices])
         result.extend(sampled_indices)
-    print('indices to sample:\n', result)
+
     return result
-    #return result[1:]
 
 
 class TextPreProcessor:
@@ -130,7 +126,7 @@ class TextPreProcessor:
                  remove_zero_vocab_docs: bool = True,
                  n_labeled_train_samples: int = 40,
                  n_unlabeled_train_samples: int = 1000,
-                 train_sample_strategy: str = "empirical",
+                 train_sample_strategy: str = "uniform",
                  remove_fields=[]):  # ("headers", "footers", "quotes")
         self.tokens_to_remove = tokens_to_remove
         self.english_vocab = english_vocab
@@ -256,8 +252,6 @@ class TextPreProcessor:
                                                       partition_idx=0,
                                                       n_samples_per_part=n_samples_per_label,
                                                       sample_with_replacement=False)
-            print('train indices after running sample partition indices:\n',
-                  train_indices)
 
         else:
             raise Exception("Train sample strategy '%s' not implemented\n \
@@ -278,7 +272,6 @@ class TextPreProcessor:
             self.labeled_train_data_sample = self.full_train_data[self.avail_train_indices_list]
             self.train_sample_label_vals = self.full_train_label_vals[self.avail_train_indices_list]
             sample_train_indices = self.select_label_train_indices(strategy="uniform")
-            print('got these sample train indices:\n', sample_train_indices)
             # RESET AFTER SAMPLING STRATEGY
             self.labeled_train_data_sample = self.labeled_train_data_sample[sample_train_indices]
             self.train_sample_label_vals = self.train_sample_label_vals[sample_train_indices]
@@ -348,8 +341,6 @@ class TextPreProcessor:
                 raise Exception("Preprocessing data type must be 'train', 'unlabeled', or 'test'")
             if len(data) == 0:
                 raise Exception("(raw) %s data not set; run\n set_test_raw_data()" % subset)
-            # print('data shape = ', data.shape)
-            # print('data type = ', type(data))
             x_proc = self.process_documents_text(documents_array=data)
             x_proc_vect = self.count_vectorizer.transform(x_proc)
         data_vect_array = x_proc_vect.toarray()
