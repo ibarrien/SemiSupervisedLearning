@@ -5,55 +5,19 @@ Fixed: unlabeled dataset for EM; test dataset
 Dynamic: labeled train dataset for EM
 For each loop:
 - increase labeled train dataset size
-- evaluate on test set
+- evaluate on fixed test set
 
 @authors: ibarrien
 """
 import argparse
 import pathlib
-# from nltk.corpus import stopwords
 from lib_utils import nltkconfig, torchutils
 from lib_utils.preprocessing import TextPreProcessor
 from lib_utils.expectation_maximization import EM_SSL
 from lib_utils.summarize_results import plot_test_acc
 
 
-if __name__ == '__main__':
-    torchutils.initSeeds()
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--n_labeled', type=str, dest='n_labeled',
-                        help='Comma separated no-spaces list of num labeled samples for training; '
-                        'disjoint from unlabeled train samples.\n'
-                        'Example: 500,1000,1500,2000\n'
-                        'Note: each value determines an experiment'
-                        'Note: uniform labeled distribution is sampled\n',
-                        default='100,200')
-    parser.add_argument('--n_unlabeled', type=int, dest='n_unlabeled',
-                        help='Num unlabeled samples for training; '
-                        'disjoint from labeled train samples.\n'
-                        'Note: each experiment uses the same number of unlabeled samples,'
-                        'but not necc the same subset since disjointness enforced in sampling',
-                        default=5000)
-    parser.add_argument('--max_iters', type=int, dest='max_iters',
-                        help='max number of EM iterations per experiment;'
-                        'same as num epochs since each iter uses all training data',
-                        default=10)
-    parser.add_argument('--min_delta', type=float, dest='min_delta',
-                        help='min improvement in loss between EM steps; '
-                        'triggers early stopping if min delta improvement not met',
-                        default=1e-2)
-    parser.add_argument('--out_dir', type=str, dest='out_dir',
-                        help='output folder name for experiment result plots',
-                        default='')
-    parser.add_argument('--nltk_data_dir', type=str, dest='nltk_data_dir',
-                        help='path to nltk data, including corpora/stopwords.\
-                        If corpora/stopwords does not exist, download here.',
-                        default=nltkconfig.getDataFolder())
-    parser.add_argument('--test_acc_plot_fname', type=str, dest='test_acc_plot_fname',
-                        help='filename of test accuracy plot',
-                        default='acc_plot.png')
-
-    args = parser.parse_args()
+def main(args):
     nltk_data_dir = args.nltk_data_dir
     nltkconfig.set_nltk_datapath(mydatafolder=nltk_data_dir,
                                  override=True)
@@ -98,15 +62,16 @@ if __name__ == '__main__':
         # doc-to-vect based on train sample's count vectorizer
         processor.set_labeled_train_sample_count_data()
         print('labeled_train_sample_count_data shape:', processor.labeled_train_sample_count_data.shape)
-        # TODO: updated labeled train sampling to unif across classes
-        if len(set(processor.train_sample_label_vals)) < 20:
+        unique_sampled_train_label_vals = len(set(processor.train_sample_label_vals))
+        if unique_sampled_train_label_vals < 20:
+            print(f"sampled only %d labels" % unique_sampled_train_label_vals)
             print(f"Sampled less than 20 unique labels, skipping")
             continue
         processor.set_unlabeled_count_data()
         print('unlabeled train count_data shape:', processor.unlabeled_count_data.shape)
         processor.set_test_count_data()
 
-        # scale count data to trains' unif doc len
+        # scale count data to train data unif doc len
         scaled_labeled_train_sample_data = processor.make_uniform_doc_lens(word_count_data=processor.labeled_train_sample_count_data)
         scaled_unlabeled_data = processor.make_uniform_doc_lens(word_count_data=processor.unlabeled_count_data)
         scaled_test_data = processor.make_uniform_doc_lens(word_count_data=processor.test_count_data)
@@ -125,13 +90,49 @@ if __name__ == '__main__':
                                                      "ssl_train": model.last_em_iter_test_acc()}
         print(test_acc_results)
 
-    # SUMMARIZE RESULTS
-    acc_plot_name = "ssl_test_acc.png"
-    plot_save_path = str(test_acc_plot_path)
+    # PLOT SUMMARY RESULTS
     plot_test_acc(test_acc_results=test_acc_results,
                   n_unlabeled=n_unlabeled_train,
                   plot_save_path=test_acc_plot_path,
                   only_labeled_key="only_labeled_train",
                   ssl_key="ssl_train")
 
+
+if __name__ == '__main__':
+    torchutils.initSeeds()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--n_labeled', type=str, dest='n_labeled',
+                        help='Comma separated no-spaces list of num labeled samples for training; '
+                        'disjoint from unlabeled train samples.\n'
+                        'Example: 500,1000,1500,2000\n'
+                        'Note: each value determines an experiment'
+                        'Note: default label sampling is uniform; alternative is emperical\n',
+                        default='200,1000')
+    parser.add_argument('--n_unlabeled', type=int, dest='n_unlabeled',
+                        help='Num unlabeled samples for training; '
+                        'disjoint from labeled train samples.\n'
+                        'Note: each experiment uses the same number of unlabeled samples,'
+                        'but not necc the same subset since disjointness enforced in sampling',
+                        default=10000)
+    parser.add_argument('--max_iters', type=int, dest='max_iters',
+                        help='max number of EM iterations per experiment;'
+                        'same as num epochs since each iter uses all training data',
+                        default=5)
+    parser.add_argument('--min_delta', type=float, dest='min_delta',
+                        help='min improvement in loss between EM steps; '
+                        'triggers early stopping if min delta improvement not met',
+                        default=1e-2)
+    parser.add_argument('--out_dir', type=str, dest='out_dir',
+                        help='output folder name for experiment result plots',
+                        default='')
+    parser.add_argument('--nltk_data_dir', type=str, dest='nltk_data_dir',
+                        help='path to nltk data, including corpora/stopwords.\
+                        If corpora/stopwords does not exist, download here.',
+                        default=nltkconfig.getDataFolder())
+    parser.add_argument('--test_acc_plot_fname', type=str, dest='test_acc_plot_fname',
+                        help='filename of test accuracy plot',
+                        default='acc_plot.png')
+
+    args = parser.parse_args()
+    main(args)
 
