@@ -107,7 +107,7 @@ if __name__ == '__main__':
                         'Example: 500,1000,1500,2000\n'
                         'Note: each value determines an experiment'
                         'Note: default label sampling is uniform; alternative is emperical\n',
-                        default='100,300,500,700,1000')
+                        default='20,100,300,500,700,1000')
     parser.add_argument('--n_unlabeled', type=int, dest='n_unlabeled',
                         help='Num unlabeled samples for training; '
                         'disjoint from labeled train samples.\n'
