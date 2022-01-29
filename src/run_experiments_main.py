@@ -74,4 +74,3 @@ for n_labeled_train_samples in n_labeled_train_samples_list:
     pct_test_correct_preds = model.evaluate_on_data(count_data=scaled_test_data,
                                                     label_vals=processor.full_test_label_vals)
     print(pct_test_correct_preds)
-
