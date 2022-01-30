@@ -1,5 +1,5 @@
 """
-EM train and test, after EDA.
+EM train and test, after data preprocessing and train/test splits.
 
 Summary
 -------
@@ -20,8 +20,7 @@ Each "Eq" referes to an equation in [Nigam] Section 3.2.
 
 """
 
-import pathlib
-import pickle
+from typing import Dict
 import numpy as np
 
 
@@ -49,7 +48,7 @@ class EM_SSL(object):
                  test_count_data: np.ndarray = None,
                  test_label_vals: np.ndarray = None,
                  doc_axis: int = 0, vocab_axis: int = 1,
-                 max_em_iters=20, min_em_loss_delta=1e-2):
+                 max_em_iters: int = 20, min_em_loss_delta: float = 1e-2):
 
         # Static vals
         self.labeled_count_data = labeled_count_data  # (n_docs, n_words) LABELED COUNT DATA
@@ -62,16 +61,10 @@ class EM_SSL(object):
         self.min_em_loss_delta = min_em_loss_delta
         self.vocab_size = np.shape(self.labeled_count_data)[self.vocab_axis]
         assert len(self.labeled_count_data) == len(label_vals), \
-            "Num labeled data = %d != num labels = %d" % len(self.labeled_count_data)
-
+            "Num labeled sample features = %d != num sample labels = %d" % \
+            (len(self.labeled_count_data), len(label_vals))
         self.label_set = set(np.unique(label_vals))
         print('labeled train sample has %d unique labels' % len(self.label_set))
-
-        """
-        labels_list = list(self.label_set)
-        labels_list.sort(reverse=False)
-        self.ordered_labels_list = labels_list
-        """
         self.ordered_labels_list = list(range(20))
         self.n_labels = 20  # len(self.label_set)
         self.n_labeled_docs_per_class = np.zeros(self.n_labels)  # populated only once, in initial E_step
@@ -83,6 +76,7 @@ class EM_SSL(object):
         self.class_mask = np.array([])
         self.this_class_count_data = np.array([])
         self.theta_j: float = 0  # Naive Bayes class prob of class j
+        self.preds = np.array([])  # prediction array for evaluation, e.g. on out-of-sample data
         # Hash maps of statistics
         self.theta_j_per_class = np.zeros(self.n_labels)  # vals = theta_j: float
         self.theta_j_vocab_per_class = np.zeros([self.n_labels, self.vocab_size])  # vals = theta_jt: np.ndarray
@@ -92,14 +86,18 @@ class EM_SSL(object):
         self.word_counts_per_class = np.zeros([self.n_labels, self.vocab_size])  # vals = word_counts: np.ndarray
         self.unlabeled_this_class_probas = np.zeros(self.n_unlabeled_docs)  # for single j, each x_u: P(c=j | x_u)
         self.unlabeled_data_class_probas = np.zeros([self.n_unlabeled_docs, self.n_labels])  # [P(c=j | x_u)]
+        self.test_accuracy_hist = dict()  # out-of-sample test hist, including model without unlabeled data
+        self.total_em_iters = 0  # number of EM iters including unlabeled data
         self.test_count_data = test_count_data
         self.test_label_vals = test_label_vals
 
-    def set_in_class_mask(self):
+    def set_in_class_mask(self) -> None:
         """Data mask of class label."""
         self.class_mask = self.label_vals == self.curr_class_idx
 
-    def set_this_class_count_data(self):
+        return None
+
+    def set_this_class_count_data(self) -> None:
         """Set word count of labeled data subset corresponding to a class."""
         if self.only_labeled_data:
             # select labeled data in class
@@ -108,7 +106,9 @@ class EM_SSL(object):
             # need all unlabeled data since class membership is a probability
             self.this_class_count_data = self.unlabeled_count_data  # (n_docs, n_labels)
 
-    def compute_doc_counts_in_class(self) -> float:
+        return None
+
+    def compute_doc_counts_in_class(self) -> None:
         """Compute n_j: num (potentially fractional) documents with class label. Assumes class mask is set."""
         if self.only_labeled_data:
             n_docs_in_class = np.sum(self.class_mask, axis=0)
@@ -122,16 +122,19 @@ class EM_SSL(object):
             self.n_docs_per_class[self.curr_class_idx] = \
                 self.n_labeled_docs_per_class[self.curr_class_idx] + fractional_docs_in_class
 
-    def compute_theta_j(self):
+        return None
+
+    def compute_theta_j(self) -> None:
         """Compute single class proba = P(class = j | theta) via Eq 3.6. Assumes class mask is set."""
-        # theta_j = 0.0
         n_docs_in_class = self.n_docs_per_class[self.curr_class_idx]
         theta_j = (n_docs_in_class + 1) / (self.n_docs + self.n_labels)
         self.theta_j_per_class[self.curr_class_idx] = theta_j
         if np.isclose(theta_j, 0):
             print('WARNING: Got theta_j near zero for class=%d' % self.curr_class_idx)
 
-    def compute_word_counts_in_class(self):
+        return None
+
+    def compute_word_counts_in_class(self) -> None:
         """For given class j (implicit), compute each words' count; +fractional for unlabeled based on class probas.
 
         Params:
@@ -154,17 +157,21 @@ class EM_SSL(object):
             self.word_counts_per_class[self.curr_class_idx] = \
                 self.labeled_word_counts_per_class[self.curr_class_idx] + unlabled_n_jt_vect  # (vocab_size,)
 
+        return None
+
     @staticmethod
     def compute_total_words(word_count_data: np.ndarray) -> float:
         """Compute total amount of words, counting multiplicities (i.e. full frequency sum)."""
         return np.sum(word_count_data)
 
-    def compute_total_words_in_class(self):
+    def compute_total_words_in_class(self) -> None:
         """Compute total (potentially fractional) total words in current class."""
         # word_counts_per_class is already labeled_data/ +unlabeled aware
         self.total_word_count_per_class[self.curr_class_idx] = np.sum(self.word_counts_per_class[self.curr_class_idx])
 
-    def compute_theta_vocab_j(self):
+        return None
+
+    def compute_theta_vocab_j(self) -> None:
         """For each word t and fixed class j, compute word probas per class:
             theta_tj values via Eq. 3.5:
             P(w_t | c_j; theta) = (1 + count_of_word_t_in_class_j) / (vocab_size + total_sum_words_class_j)
@@ -181,15 +188,14 @@ class EM_SSL(object):
         total_word_count_j = self.total_word_count_per_class[self.curr_class_idx]  # int
         theta_j_vocab = (1 + word_counts_j) / (self.vocab_size + total_word_count_j)  # Eq 3.5
         self.theta_j_vocab_per_class[self.curr_class_idx] = theta_j_vocab  # (vocab_size, 1)
-        # TODO: theta_jt near zero => log(theta_jt) -> nan, when computing log loss
-        # can split via log(1 + word_counts_j) - log(self.vocab_size + total_word_count_j):
 
-    def compute_all_thetas(self):
+        return None
+
+    def compute_all_thetas(self) -> None:
         """For each class j, labeled docs, and words, compute the "mixture" theta:
             [theta_j] and  [theta_jt: t in words = vocab]
         These are the maximum a posteriori (MAP) estimates of the Naive Bayes model.
         """
-        # for j in self.ordered_labels_list:
         for j in self.label_set:
             self.curr_class_idx = j
             if self.only_labeled_data:
@@ -202,12 +208,15 @@ class EM_SSL(object):
             self.compute_total_words_in_class()  # -> self.total_word_count_per_class
             self.compute_theta_vocab_j()
 
+        return None
+
     @staticmethod
     def compute_log_of_sums(log_factors: np.ndarray) -> np.ndarray:
         """Compute log of sums via LogExpSum trick (cf. Murphy 2012 Section 3.5.3)."""
         max_log = np.max(log_factors)
         summand = np.exp(log_factors - max_log)
         log_of_sums = np.log(np.sum(summand)) + max_log
+
         return log_of_sums
 
     def compute_unnormalized_class_log_probas_doc(self, doc_word_counts: np.ndarray) -> np.ndarray:
@@ -227,6 +236,7 @@ class EM_SSL(object):
         u_log_probas = np.log(self.theta_j_per_class) + \
                        np.array([np.sum(doc_word_counts * np.log(self.theta_j_vocab_per_class[j]), axis=0)
                                 for j in self.ordered_labels_list])
+
         return u_log_probas
 
     def compute_normalized_class_probas_doc(self, doc_word_counts: np.ndarray) -> np.ndarray:
@@ -247,9 +257,10 @@ class EM_SSL(object):
         log_of_sums = self.compute_log_of_sums(log_factors=unnormalized_class_log_probas)
         class_log_probas_normalized = unnormalized_class_log_probas - log_of_sums  # log(a/b) = log(a) - log(b)
         class_probas_normalized = np.exp(class_log_probas_normalized)
+
         return class_probas_normalized
 
-    def compute_class_probas_unlabeled_data(self):
+    def compute_class_probas_unlabeled_data(self) -> None:
         """For each unlabeled doc x_u and class j, compute P(c = j | x_u, theta).
 
         Notes:
@@ -259,7 +270,9 @@ class EM_SSL(object):
                                                                axis=self.vocab_axis,
                                                                arr=self.unlabeled_count_data)
 
-    def E_step(self):
+        return None
+
+    def E_step(self) -> None:
         """Estimate expectations, given current model params.
 
         Computes:
@@ -267,14 +280,18 @@ class EM_SSL(object):
         """
         self.compute_class_probas_unlabeled_data()  # self.unlabeled_data_class_probas
 
-    def M_step(self):
+        return None
+
+    def M_step(self) -> None:
         """Maximize likelihood of model params using current expecations
 
         Computes: Re-estimate of theta using (fractional) unlabeled class probas.
         """
         self.compute_all_thetas()
 
-    def check_initial_M_step(self):
+        return None
+
+    def check_initial_M_step(self) -> None:
         total_class_counts = np.sum(self.n_labeled_docs_per_class, axis=0)
         n_labeled_train = self.labeled_count_data.shape[0]
         print("Checking initial M step on only labeled train data...")
@@ -282,15 +299,19 @@ class EM_SSL(object):
             (total_class_counts, n_labeled_train)
         print("Congrats, initial M step assertions passed.")
 
-    def initialize_EM(self):
+        return None
+
+    def initialize_EM(self) -> None:
         """Initial computations prior to expecation-maximization loop."""
         self.only_labeled_data = True
-        assert self.count_data.shape == self.labeled_count_data.shape, "First E_step is not all labeled data"
+        assert self.count_data.shape == self.labeled_count_data.shape, "First M_step is not on all labeled data"
         self.M_step()  # Builds the initial NBC thetas from labeled docs only
         self.check_initial_M_step()
         self.only_labeled_data = False
         # update total number of documents being leveraged
         self.n_docs = len(self.labeled_count_data) + len(self.unlabeled_count_data)
+
+        return None
 
     def compute_prior_loss(self) -> float:
         """Compute log(P(theta)).
@@ -336,6 +357,7 @@ class EM_SSL(object):
                                           arr=joint_log_factors)
         # log_of_sums: (n_unlabeled_docs, )
         loss = np.sum(log_of_sums)  # sum across all unlabeled docs
+
         return loss
 
     def compute_total_loss(self) -> float:
@@ -346,11 +368,11 @@ class EM_SSL(object):
 
         Notes:
             "Our prior distribution is formed with the product of Dirichlet distributions: one
-            for each class multinomial and one for the overall class probabilities
+            for each class multinomial and one for the overall class probabilities."
 
         """
         total_loss = self.compute_prior_loss() + self.compute_labeled_loss() + self.compute_unlabeled_loss()
-        # total_loss = self.compute_labeled_loss() + self.compute_unlabeled_loss()
+
         return -total_loss
 
     def evaluate_on_data(self, count_data: np.array, label_vals: np.array) -> float:
@@ -372,29 +394,50 @@ class EM_SSL(object):
         correct_preds = self.preds == label_vals
         n_correct = np.sum(correct_preds)
         pct_correct = n_correct / len(label_vals)
+
         return pct_correct
 
-    def fit(self):
+    def fit(self) -> None:
         """Run expectation maximization until delta convergence or max iters."""
         self.initialize_EM()
+        # get test accuracy without using unlabeled data in training
+        if self.test_count_data is not None and self.test_label_vals is not None:
+            curr_test_acc = self.evaluate_on_data(count_data=self.test_count_data,
+                                                  label_vals=self.test_label_vals)
+            print('curr out-of-sample test acc using only labeled data: %0.2f%%' % (100 * curr_test_acc))
+            self.test_accuracy_hist[0] = curr_test_acc
+        # start EM loop using unlabeled data as part of training
         curr_loss = np.inf
-        for _ in range(self.max_em_iters):
+        for em_iter in range(self.max_em_iters):
             prev_loss = curr_loss
             curr_loss = self.compute_total_loss()
-            print('curr loss: %0.2f' % curr_loss)
+            print('curr train loss: %0.2f' % curr_loss)
             self.E_step()
             self.M_step()
+            self.total_em_iters += 1
             if self.test_count_data is not None and self.test_label_vals is not None:
                 curr_test_acc = self.evaluate_on_data(count_data=self.test_count_data,
                                                       label_vals=self.test_label_vals)
-                print('curr out-of-sample itest acc: %0.2f%%' % (100 * curr_test_acc))
+                print('curr out-of-sample test acc: %0.2f%%' % (100 * curr_test_acc))
+                self.test_accuracy_hist[em_iter + 1] = curr_test_acc  # key 0 is for using only labeled data
             delta_improvement = prev_loss - curr_loss  # expect 0 <= curr_loss <= prev_loss
             if delta_improvement < self.min_em_loss_delta:
                 print('Early stopping EM: delta improvement = %0.4f < min_delta = %0.4f'
                       % (delta_improvement, self.min_em_loss_delta))
                 break
 
+        return None
 
+    def get_test_acc_hist(self) -> Dict[int, float]:
+        """Get out-of-sample test accuracy history over EM iterations."""
+        return self.test_accuracy_hist
 
+    def only_labeled_test_acc(self) -> float:
+        """Test accuracy using only labeled data."""
+        return self.test_accuracy_hist[0]
 
+    def last_em_iter_test_acc(self) -> float:
+        """Test accuracy on last complete EM iteration that included unlabeled data."""
+        assert self.total_em_iters > 0, "Did not train using unlabeled data."
 
+        return self.test_accuracy_hist[self.total_em_iters]

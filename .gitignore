@@ -110,4 +110,5 @@ ENV/
 *.toc
 
 venv*/
+datasets/
 
