@@ -35,12 +35,12 @@ Handled by specifying nltk data dir in run_experiments_main
 ### run experiments with varying num of labeled samples:
 ```bash
 python src/run_experiments_main.py 
---n_labeled 100,300,500,700,1000 
+--n_labeled 20,100,300,500,700,1000 
 --n_unlabeled 10000 
---max_iters 10 
+--max_iters 5 
 --out_dir <your_output_dir> 
 --nltk_data_dir <optional: local nltk data dir> 
 --test_acc_plot_fname test_acc.png
 ```
 
-<img src="https://user-images.githubusercontent.com/7552335/150062562-64e3c1fe-3f08-4dac-80c5-b9eb13e5c4fc.png" width="350" height="300" />
+<img src="https://github.com/ibarrien/SemiSupervisedLearning/blob/main/src/acc_plot_uniform_train_sampling.png?raw=true" width="350" height="300" />
