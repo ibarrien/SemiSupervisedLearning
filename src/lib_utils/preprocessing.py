@@ -46,6 +46,7 @@ from sklearn.datasets import fetch_20newsgroups
 def remove_stop_words(text: str, tokens_to_remove: List[str]) -> str:
     """Remove common stop words from sentence"""
     new_text = ' '.join([x for x in text.split() if x not in tokens_to_remove])
+
     return new_text
 
 
@@ -53,19 +54,20 @@ def _stem(text: str, stemmer, min_len_stemmed: int = 2) -> str:
     """Remove stemming from sentence"""
     new_text = ' '.join([stemmer.stem(x) for x in text.split()])
     new_text = ' '.join([x for x in new_text.split() if len(x) > min_len_stemmed])
+
     return new_text
 
 
 def is_english(text: str, english_vocab: List[str]) -> str:
     """Remove words not in english vocab."""
     english_words_text = ' '.join([x for x in text.split() if x in english_vocab])
+
     return english_words_text
 
 
 def _process_text(document_as_single_str: str, tokens_to_remove: List[str] = None,
                   english_vocab: List[str] = None, stemmer=None) -> str:
     """Basic text processing on a single string."""
-    # filtered.translate(str.maketrans('', '', string.punctuation))
     filtered = document_as_single_str.lower()
     filtered = re.sub('[^a-zA-Z]', ' ', filtered)
     filtered = re.sub(r'\[[0-9]*\]', ' ', filtered)
@@ -76,11 +78,12 @@ def _process_text(document_as_single_str: str, tokens_to_remove: List[str] = Non
         filtered = remove_stop_words(filtered, tokens_to_remove=tokens_to_remove)
     if english_vocab is not None:
         filtered = is_english(filtered, english_vocab=english_vocab)
+
     return filtered
 
 
 def sample_partitions_indices(x: np.ndarray,
-                              partition_vals: Set, partition_idx: int = 0,
+                              partition_vals: Set,
                               n_samples_per_part: int = 1,
                               sample_with_replacement=False) -> np.ndarray:
     """Get indices of rand sampled elements per partition from 1 or 2-dim array"""
@@ -249,7 +252,6 @@ class TextPreProcessor:
                                 )
             train_indices = sample_partitions_indices(x=self.train_sample_label_vals,
                                                       partition_vals=unique_train_labels,
-                                                      partition_idx=0,
                                                       n_samples_per_part=n_samples_per_label,
                                                       sample_with_replacement=False)
 

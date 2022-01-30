@@ -191,7 +191,7 @@ class EM_SSL(object):
 
         return None
 
-    def compute_all_thetas(self):
+    def compute_all_thetas(self) -> None:
         """For each class j, labeled docs, and words, compute the "mixture" theta:
             [theta_j] and  [theta_jt: t in words = vocab]
         These are the maximum a posteriori (MAP) estimates of the Naive Bayes model.
@@ -207,6 +207,8 @@ class EM_SSL(object):
             self.compute_word_counts_in_class()  # -> self.word_counts_per_class
             self.compute_total_words_in_class()  # -> self.total_word_count_per_class
             self.compute_theta_vocab_j()
+
+        return None
 
     @staticmethod
     def compute_log_of_sums(log_factors: np.ndarray) -> np.ndarray:
