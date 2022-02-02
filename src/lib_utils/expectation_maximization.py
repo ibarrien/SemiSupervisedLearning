@@ -22,6 +22,7 @@ Each "Eq" referes to an equation in [Nigam] Section 3.2.
 
 from typing import Dict
 import numpy as np
+from tqdm import tqdm
 
 
 class EM_SSL(object):
@@ -297,7 +298,7 @@ class EM_SSL(object):
         print(" Checking initial M step on only labeled train data...")
         assert total_class_counts == n_labeled_train, "Total class count = %d != %d labeled train samples" % \
             (total_class_counts, n_labeled_train)
-        print(" Congrats, initial M step assertions passed.")
+        #print(" Congrats, initial M step assertions passed.")
 
         return None
 
@@ -408,23 +409,25 @@ class EM_SSL(object):
             self.test_accuracy_hist[0] = curr_test_acc
         # start EM loop using unlabeled data as part of training
         curr_loss = np.inf
-        for em_iter in range(self.max_em_iters):
-            prev_loss = curr_loss
-            curr_loss = self.compute_total_loss()
-            print('  curr train loss: %0.2f' % curr_loss)
-            self.E_step()
-            self.M_step()
-            self.total_em_iters += 1
-            if self.test_count_data is not None and self.test_label_vals is not None:
-                curr_test_acc = self.evaluate_on_data(count_data=self.test_count_data,
-                                                      label_vals=self.test_label_vals)
-                print('  curr out-of-sample test acc: %0.2f%%' % (100 * curr_test_acc))
-                self.test_accuracy_hist[em_iter + 1] = curr_test_acc  # key 0 is for using only labeled data
-            delta_improvement = prev_loss - curr_loss  # expect 0 <= curr_loss <= prev_loss
-            if delta_improvement < self.min_em_loss_delta:
-                print('Early stopping EM: delta improvement = %0.4f < min_delta = %0.4f'
-                      % (delta_improvement, self.min_em_loss_delta))
-                break
+#        for em_iter in range(self.max_em_iters):
+        with tqdm(range(self.max_em_iters)) as bar:
+            for em_iter in bar:                    
+                prev_loss = curr_loss
+                curr_loss = self.compute_total_loss()
+                print(f"  train loss: {curr_loss:0.2f}, ", end='')
+                self.E_step()
+                self.M_step()
+                self.total_em_iters += 1
+                if self.test_count_data is not None and self.test_label_vals is not None:
+                    curr_test_acc = self.evaluate_on_data(count_data=self.test_count_data,
+                                                          label_vals=self.test_label_vals)
+                    print(f"out-of-sample test acc: {100 * curr_test_acc:0.2f}%")
+                    self.test_accuracy_hist[em_iter + 1] = curr_test_acc  # key 0 is for using only labeled data
+                delta_improvement = prev_loss - curr_loss  # expect 0 <= curr_loss <= prev_loss
+                if delta_improvement < self.min_em_loss_delta:
+                    print('Early stopping EM: delta improvement = %0.4f < min_delta = %0.4f'
+                          % (delta_improvement, self.min_em_loss_delta))
+                    break
 
         return None
 
