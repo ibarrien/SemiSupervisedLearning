@@ -414,19 +414,22 @@ class EM_SSL(object):
             for em_iter in bar:                    
                 prev_loss = curr_loss
                 curr_loss = self.compute_total_loss()
-                print(f"  train loss: {curr_loss:0.2f}, ", end='')
+#                print(f"  train loss: {curr_loss:0.2f}, ", end='')
+                prog_str = f"train loss: {curr_loss:0.2f}, "
+                bar.set_postfix_str(prog_str)
                 self.E_step()
                 self.M_step()
                 self.total_em_iters += 1
                 if self.test_count_data is not None and self.test_label_vals is not None:
                     curr_test_acc = self.evaluate_on_data(count_data=self.test_count_data,
                                                           label_vals=self.test_label_vals)
-                    print(f"out-of-sample test acc: {100 * curr_test_acc:0.2f}%")
+#                    print(f"out-of-sample test acc: {100 * curr_test_acc:0.2f}%")
+                    prog_str += f"out-of-sample acc {100 * curr_test_acc:0.2f}%"
+                    bar.set_postfix_str(prog_str)
                     self.test_accuracy_hist[em_iter + 1] = curr_test_acc  # key 0 is for using only labeled data
                 delta_improvement = prev_loss - curr_loss  # expect 0 <= curr_loss <= prev_loss
                 if delta_improvement < self.min_em_loss_delta:
-                    print('Early stopping EM: delta improvement = %0.4f < min_delta = %0.4f'
-                          % (delta_improvement, self.min_em_loss_delta))
+                    print(f'Early stopping EM: delta improvement = {delta_improvement:0.4f} < min_delta = {self.min_em_loss_delta:0.4f}')
                     break
 
         return None
