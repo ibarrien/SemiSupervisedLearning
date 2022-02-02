@@ -64,7 +64,7 @@ class EM_SSL(object):
             "Num labeled sample features = %d != num sample labels = %d" % \
             (len(self.labeled_count_data), len(label_vals))
         self.label_set = set(np.unique(label_vals))
-        print('labeled train sample has %d unique labels' % len(self.label_set))
+        print(f' labeled train sample has {len(self.label_set)} unique labels')
         self.ordered_labels_list = list(range(20))
         self.n_labels = 20  # len(self.label_set)
         self.n_labeled_docs_per_class = np.zeros(self.n_labels)  # populated only once, in initial E_step
@@ -294,10 +294,10 @@ class EM_SSL(object):
     def check_initial_M_step(self) -> None:
         total_class_counts = np.sum(self.n_labeled_docs_per_class, axis=0)
         n_labeled_train = self.labeled_count_data.shape[0]
-        print("Checking initial M step on only labeled train data...")
+        print(" Checking initial M step on only labeled train data...")
         assert total_class_counts == n_labeled_train, "Total class count = %d != %d labeled train samples" % \
             (total_class_counts, n_labeled_train)
-        print("Congrats, initial M step assertions passed.")
+        print(" Congrats, initial M step assertions passed.")
 
         return None
 
@@ -404,21 +404,21 @@ class EM_SSL(object):
         if self.test_count_data is not None and self.test_label_vals is not None:
             curr_test_acc = self.evaluate_on_data(count_data=self.test_count_data,
                                                   label_vals=self.test_label_vals)
-            print('curr out-of-sample test acc using only labeled data: %0.2f%%' % (100 * curr_test_acc))
+            print(' out-of-sample test acc using only labeled data: %0.2f%%' % (100 * curr_test_acc))
             self.test_accuracy_hist[0] = curr_test_acc
         # start EM loop using unlabeled data as part of training
         curr_loss = np.inf
         for em_iter in range(self.max_em_iters):
             prev_loss = curr_loss
             curr_loss = self.compute_total_loss()
-            print('curr train loss: %0.2f' % curr_loss)
+            print('  curr train loss: %0.2f' % curr_loss)
             self.E_step()
             self.M_step()
             self.total_em_iters += 1
             if self.test_count_data is not None and self.test_label_vals is not None:
                 curr_test_acc = self.evaluate_on_data(count_data=self.test_count_data,
                                                       label_vals=self.test_label_vals)
-                print('curr out-of-sample test acc: %0.2f%%' % (100 * curr_test_acc))
+                print('  curr out-of-sample test acc: %0.2f%%' % (100 * curr_test_acc))
                 self.test_accuracy_hist[em_iter + 1] = curr_test_acc  # key 0 is for using only labeled data
             delta_improvement = prev_loss - curr_loss  # expect 0 <= curr_loss <= prev_loss
             if delta_improvement < self.min_em_loss_delta:

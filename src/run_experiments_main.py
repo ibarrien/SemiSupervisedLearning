@@ -55,20 +55,20 @@ def main(args):
             print("Warning: experiment loop skipping zero labeled train samples")
             continue
         # set this train sample
-        print("curr n labeled train samples: %d" % n_labeled_train_samples)
+        print(f" using {n_labeled_train_samples} labeled train samples: ")
         processor.set_n_labeled_train_samples(n=n_labeled_train_samples)
         processor.set_sample_raw_train_data()
 
         # doc-to-vect based on train sample's count vectorizer
         processor.set_labeled_train_sample_count_data()
-        print('labeled_train_sample_count_data shape:', processor.labeled_train_sample_count_data.shape)
+        print(' labeled_train_sample_count_data shape:', processor.labeled_train_sample_count_data.shape)
         unique_sampled_train_label_vals = len(set(processor.train_sample_label_vals))
         if unique_sampled_train_label_vals < 20:
-            print(f"sampled only %d labels" % unique_sampled_train_label_vals)
+            print(f"sampled only {unique_sampled_train_label_vals} labels")
             print(f"Sampled less than 20 unique labels, skipping")
             continue
         processor.set_unlabeled_count_data()
-        print('unlabeled train count_data shape:', processor.unlabeled_count_data.shape)
+        print(' unlabeled train count_data shape:', processor.unlabeled_count_data.shape)
         processor.set_test_count_data()
 
         # scale count data to train data unif doc len
@@ -88,7 +88,8 @@ def main(args):
         model.fit()
         test_acc_results[n_labeled_train_samples] = {"only_labeled_train": model.only_labeled_test_acc(),
                                                      "ssl_train": model.last_em_iter_test_acc()}
-        print(test_acc_results)
+        print(f" test_acc_results: {test_acc_results}")
+        print()
 
     # PLOT SUMMARY RESULTS
     plot_test_acc(test_acc_results=test_acc_results,

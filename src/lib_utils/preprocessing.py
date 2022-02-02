@@ -268,7 +268,7 @@ class TextPreProcessor:
             run once per eval iteration on varying train size."
         """
         assert len(self.unlabeled_train_data) > 0, "Set unlabeled data before setting current labeled train sample."
-        print('num train samples to select: %d' % self.n_labeled_train_samples)
+        print(f' num train samples to select: {self.n_labeled_train_samples}' )
         if self.train_sample_strategy == "uniform":
             # need to reset indices so they don't point to original
             self.labeled_train_data_sample = self.full_train_data[self.avail_train_indices_list]
@@ -336,7 +336,7 @@ class TextPreProcessor:
             # use count_vectorizer transform only, do not fit
             if subset == 'unlabeled':
                 data = self.unlabeled_train_data
-                print('got data=unlabeled, shape=', data.shape)
+                print(f' got data=unlabeled, shape={data.shape}')
             elif subset == 'test':
                 data = self.full_test_data
             else:
@@ -362,7 +362,7 @@ class TextPreProcessor:
     def set_unlabeled_count_data(self) -> None:
         """Set np.ndarray of bag of words for unlabeled set; rows: docs, cols: word counts."""
         self.unlabeled_count_data = self.preprocess_data_to_array(subset='unlabeled')
-        print('unlabeled count data shape', self.unlabeled_count_data.shape)
+        print(' unlabeled count data shape', self.unlabeled_count_data.shape)
 
         return None
 
@@ -370,7 +370,7 @@ class TextPreProcessor:
         """Set np.ndarray of bag of words for test set; rows: docs, cols: word counts."""
         self.test_count_data = self.preprocess_data_to_array(subset='test')
         # self.test_count_data, _mask = self.remove_zero_count_docs(doc_count_data=self.test_count_data)
-        print('test count data shape', self.test_count_data.shape)
+        print(' test count data shape', self.test_count_data.shape)
 
         return None
 
